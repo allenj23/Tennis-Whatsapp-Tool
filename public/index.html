@@ -53,8 +53,17 @@
     <!-- Step 3: Select Recipients -->
     <section id="step-recipients" class="step hidden">
       <h2>Step 3 — Select Recipients</h2>
-      <p id="selected-count">0 recipients selected</p>
+      <div class="recipients-toolbar">
+        <span id="selected-count" class="selected-count">0 recipients selected</span>
+        <div class="toolbar-actions">
+          <button id="btn-select-all" class="btn btn--secondary btn--sm">Select all</button>
+          <button id="btn-clear-all" class="btn btn--secondary btn--sm">Clear all</button>
+        </div>
+      </div>
       <div id="groups-list"></div>
+      <div id="step-recipients-footer" class="step-footer hidden">
+        <button id="btn-to-compose" class="btn btn--primary">Next: Compose message</button>
+      </div>
     </section>
 
     <!-- Step 4: Compose -->

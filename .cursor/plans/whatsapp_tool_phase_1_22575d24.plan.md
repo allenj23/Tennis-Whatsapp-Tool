@@ -13,7 +13,7 @@ todos:
     status: completed
   - id: selection
     content: "M4: Recipient selection UI — group checkboxes + individual customer checkboxes, dedupe, live selected count"
-    status: pending
+    status: completed
   - id: compose-send
     content: "M5: Compose message + image/PDF attachment, throttled sequential sender, per-recipient delivery status over socket"
     status: pending

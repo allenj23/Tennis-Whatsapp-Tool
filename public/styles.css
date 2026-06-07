@@ -195,6 +195,149 @@ input[type="file"] {
   margin-top: 6px;
 }
 
+/* Recipients toolbar */
+.recipients-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.selected-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: #333;
+}
+
+.toolbar-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn--secondary {
+  background: #f0f0f0;
+  color: #333;
+  border: 1px solid #ccc;
+}
+
+.btn--secondary:hover {
+  background: #e0e0e0;
+}
+
+.btn--sm {
+  padding: 5px 12px;
+  font-size: 13px;
+}
+
+/* Group blocks */
+.group-block {
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: #f8f9fa;
+  cursor: default;
+}
+
+.group-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  flex: 1;
+}
+
+.group-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #25d366;
+}
+
+.group-name {
+  color: #1a1a1a;
+}
+
+.group-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  background: #dee2e6;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #555;
+}
+
+.btn-toggle {
+  background: none;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  color: #555;
+}
+
+.btn-toggle:hover {
+  background: #e9ecef;
+}
+
+/* Contacts list inside a group */
+.contacts-list {
+  padding: 4px 0;
+}
+
+.contact-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px 7px 36px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.1s;
+}
+
+.contact-row:hover {
+  background: #f0faf4;
+}
+
+.contact-row input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  accent-color: #25d366;
+  flex-shrink: 0;
+}
+
+.contact-name {
+  flex: 1;
+  color: #1a1a1a;
+}
+
+.contact-phone {
+  color: #888;
+  font-size: 12px;
+  font-family: monospace;
+}
+
+/* Step footer (Next button row) */
+.step-footer {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+
 /* Connected banner */
 .connected-banner {
   display: flex;

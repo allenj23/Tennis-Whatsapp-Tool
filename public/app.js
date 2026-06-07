@@ -14,10 +14,19 @@ const excelFile       = document.getElementById('excel-file');
 const uploadSummary   = document.getElementById('upload-summary');
 
 const stepRecipients  = document.getElementById('step-recipients');
+const groupsList      = document.getElementById('groups-list');
+const selectedCount   = document.getElementById('selected-count');
+const btnSelectAll    = document.getElementById('btn-select-all');
+const btnClearAll     = document.getElementById('btn-clear-all');
+const recipientsFooter = document.getElementById('step-recipients-footer');
+const btnToCompose    = document.getElementById('btn-to-compose');
+
+const stepCompose     = document.getElementById('step-compose');
 
 // ── App state ─────────────────────────────────────────────────────────────────
-let allContacts = [];   // [{name, phone, chatId, group}]
-let allGroups   = [];   // [string]
+let allContacts = [];         // [{name, phone, chatId, group}]
+let allGroups   = [];         // [string]
+let selectedChatIds = new Set(); // deduplicated set of chatIds chosen by user
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function showWaState(state) {
@@ -81,6 +90,8 @@ socket.on('wa:disconnected', (reason) => {
 // ── Contacts sync (page reload while contacts already loaded on server) ────────
 socket.on('contacts:loaded', ({ contacts, groups }) => {
   applyContacts(contacts, groups);
+  renderGroupsList();
+  unlockStep(stepRecipients);
 });
 
 // ── Excel upload ──────────────────────────────────────────────────────────────
@@ -90,6 +101,8 @@ excelFile.addEventListener('change', async (e) => {
 
   uploadSummary.innerHTML = '<p class="status-text">Parsing file...</p>';
   lockStep(stepRecipients);
+  lockStep(stepCompose);
+  selectedChatIds.clear();
 
   const formData = new FormData();
   formData.append('file', file);
@@ -105,6 +118,7 @@ excelFile.addEventListener('change', async (e) => {
 
     applyContacts(data.contacts, data.groups);
     renderUploadSummary(data);
+    renderGroupsList();
 
     if (data.contacts.length > 0) {
       unlockStep(stepRecipients);
@@ -133,3 +147,122 @@ function renderUploadSummary({ contacts, groups, skipped }) {
       ${skipNote}
     </div>`;
 }
+
+// ── M4: Recipient selection ───────────────────────────────────────────────────
+
+function renderGroupsList() {
+  selectedChatIds.clear();
+  groupsList.innerHTML = '';
+  lockStep(recipientsFooter);
+
+  allGroups.forEach((group) => {
+    const members = allContacts.filter((c) => c.group === group);
+    const groupId = `group-${CSS.escape(group)}`;
+
+    const block = document.createElement('div');
+    block.className = 'group-block';
+
+    // Group header row
+    const header = document.createElement('div');
+    header.className = 'group-header';
+    header.innerHTML = `
+      <label class="group-label">
+        <input type="checkbox" class="group-checkbox" data-group="${group}" id="${groupId}" />
+        <span class="group-name">${group}</span>
+        <span class="group-badge">${members.length}</span>
+      </label>
+      <button class="btn-toggle" data-group="${group}" aria-expanded="false">Show</button>`;
+    block.appendChild(header);
+
+    // Contacts list (collapsed by default)
+    const contactsDiv = document.createElement('div');
+    contactsDiv.className = 'contacts-list hidden';
+    contactsDiv.id = `contacts-${CSS.escape(group)}`;
+
+    members.forEach((contact) => {
+      const row = document.createElement('label');
+      row.className = 'contact-row';
+      row.innerHTML = `
+        <input type="checkbox" class="contact-checkbox"
+               data-chatid="${contact.chatId}"
+               data-group="${group}" />
+        <span class="contact-name">${contact.name}</span>
+        <span class="contact-phone">+${contact.phone}</span>`;
+      contactsDiv.appendChild(row);
+    });
+
+    block.appendChild(contactsDiv);
+    groupsList.appendChild(block);
+
+    // Toggle expand/collapse
+    header.querySelector('.btn-toggle').addEventListener('click', (e) => {
+      const btn = e.currentTarget;
+      const isExpanded = btn.getAttribute('aria-expanded') === 'true';
+      contactsDiv.classList.toggle('hidden', isExpanded);
+      btn.setAttribute('aria-expanded', String(!isExpanded));
+      btn.textContent = isExpanded ? 'Show' : 'Hide';
+    });
+
+    // Group checkbox: select/deselect all members
+    header.querySelector('.group-checkbox').addEventListener('change', (e) => {
+      const checked = e.target.checked;
+      contactsDiv.querySelectorAll('.contact-checkbox').forEach((cb) => {
+        cb.checked = checked;
+        checked ? selectedChatIds.add(cb.dataset.chatid) : selectedChatIds.delete(cb.dataset.chatid);
+      });
+      updateSelectionUI();
+    });
+  });
+
+  // Individual contact checkboxes (event delegation on groupsList)
+  groupsList.addEventListener('change', (e) => {
+    if (!e.target.classList.contains('contact-checkbox')) return;
+    const cb = e.target;
+    cb.checked ? selectedChatIds.add(cb.dataset.chatid) : selectedChatIds.delete(cb.dataset.chatid);
+    syncGroupCheckbox(cb.dataset.group);
+    updateSelectionUI();
+  });
+}
+
+/** Keep group checkbox in sync with its members' state */
+function syncGroupCheckbox(group) {
+  const groupCb  = groupsList.querySelector(`.group-checkbox[data-group="${group}"]`);
+  const memberCbs = groupsList.querySelectorAll(`.contact-checkbox[data-group="${group}"]`);
+  const total   = memberCbs.length;
+  const checked = [...memberCbs].filter((c) => c.checked).length;
+  groupCb.checked       = checked === total;
+  groupCb.indeterminate = checked > 0 && checked < total;
+}
+
+/** Update the live count label and Next button visibility */
+function updateSelectionUI() {
+  const n = selectedChatIds.size;
+  selectedCount.textContent = `${n} recipient${n !== 1 ? 's' : ''} selected`;
+  n > 0 ? unlockStep(recipientsFooter) : lockStep(recipientsFooter);
+}
+
+// Select all / clear all buttons
+btnSelectAll.addEventListener('click', () => {
+  allContacts.forEach((c) => selectedChatIds.add(c.chatId));
+  groupsList.querySelectorAll('.contact-checkbox').forEach((cb) => { cb.checked = true; });
+  groupsList.querySelectorAll('.group-checkbox').forEach((cb) => {
+    cb.checked = true;
+    cb.indeterminate = false;
+  });
+  updateSelectionUI();
+});
+
+btnClearAll.addEventListener('click', () => {
+  selectedChatIds.clear();
+  groupsList.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+    cb.checked = false;
+    cb.indeterminate = false;
+  });
+  updateSelectionUI();
+});
+
+// Next button: advance to compose step
+btnToCompose.addEventListener('click', () => {
+  unlockStep(stepCompose);
+  stepCompose.scrollIntoView({ behavior: 'smooth' });
+});
