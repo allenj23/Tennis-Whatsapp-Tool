@@ -1,0 +1,17 @@
+{
+  "name": "tennis-whatsapp-tool",
+  "version": "1.0.0",
+  "description": "Internal WhatsApp campaign tool for tennis club office staff",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "multer": "^2.1.1",
+    "qrcode": "^1.5.4",
+    "socket.io": "^4.7.5",
+    "whatsapp-web.js": "^1.26.0",
+    "xlsx": "^0.18.5"
+  }
+}

@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>WhatsApp Campaign Tool</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>WhatsApp Campaign Tool</h1>
+    <span id="server-status" class="badge badge--offline">Connecting...</span>
+  </header>
+
+  <main>
+    <!-- Step 1: Connect to WhatsApp -->
+    <section id="step-connect" class="step active">
+      <h2>Step 1 — Connect to WhatsApp</h2>
+      <p>Scan the QR code with your phone to link WhatsApp.</p>
+      <div id="qr-container">
+        <p class="placeholder">QR code will appear here once the server is connected.</p>
+      </div>
+      <p id="wa-status" class="status-text">Not connected</p>
+    </section>
+
+    <!-- Step 2: Upload Excel -->
+    <section id="step-upload" class="step hidden">
+      <h2>Step 2 — Upload Contact List</h2>
+      <p>Upload an Excel file with columns: <strong>Name | Phone | Group</strong></p>
+      <input type="file" id="excel-file" accept=".xlsx,.xls" />
+      <div id="upload-summary"></div>
+    </section>
+
+    <!-- Step 3: Select Recipients -->
+    <section id="step-recipients" class="step hidden">
+      <h2>Step 3 — Select Recipients</h2>
+      <p id="selected-count">0 recipients selected</p>
+      <div id="groups-list"></div>
+    </section>
+
+    <!-- Step 4: Compose -->
+    <section id="step-compose" class="step hidden">
+      <h2>Step 4 — Compose Message</h2>
+      <textarea id="message-text" rows="5" placeholder="Type your message here..."></textarea>
+      <div class="field">
+        <label for="media-file">Attach image or PDF (optional)</label>
+        <input type="file" id="media-file" accept="image/*,.pdf" />
+      </div>
+      <div id="media-preview"></div>
+      <button id="btn-send" class="btn btn--primary" disabled>Send</button>
+    </section>
+
+    <!-- Step 5: Send & Status -->
+    <section id="step-status" class="step hidden">
+      <h2>Step 5 — Sending</h2>
+      <div id="send-progress"></div>
+      <div id="send-summary"></div>
+    </section>
+  </main>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

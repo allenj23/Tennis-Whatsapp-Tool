@@ -1,31 +1,25 @@
 # WhatsApp Campaign Tool
 
-Goal:
-Allow office staff to send WhatsApp messages, flyers, images and PDFs to selected groups or customers from an Excel file.
+Internal tool for tennis club office staff to send WhatsApp messages, images, and PDFs to selected contacts from an Excel file.
 
-Phase 1:
+## Documentation
 
-- Connect to WhatsApp using WhatsApp Web
-- QR authentication
-- Upload Excel file
+| Document | Contents |
+|---|---|
+| [PROJECT.md](PROJECT.md) | Product requirements, features, and scope |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Technical design, tech stack, folder structure, implementation milestones, risks |
+| [BACKLOG.md](BACKLOG.md) | Planned future features (not yet implemented) |
 
-Excel structure:
+## Quick Start
 
-Name | Phone | Group
+**Prerequisites:** Node.js LTS (18 or 20), npm.
 
-Features:
+```bash
+npm install
+npm start
+```
 
-- Display all groups found in Excel
-- Select one or more groups
-- Select individual customers
-- Compose message
-- Send to all selected recipients
-- Show delivery status
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-Requirements:
-
-- Simple internal tool
-- Single user
-- No AI
-- No scheduling
-- No database
+> Note: `whatsapp-web.js` uses Puppeteer and will download a Chromium browser on first install.
+> The `xlsx` package has known low-risk advisories (prototype pollution / ReDoS) with no upstream fix available; safe for internal use with trusted files.
