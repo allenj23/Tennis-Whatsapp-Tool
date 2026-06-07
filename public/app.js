@@ -596,82 +596,62 @@ function renderGroupsList() {
     contactsDiv.className = 'contacts-list hidden';
     contactsDiv.id = `contacts-${CSS.escape(group)}`;
 
-    // ── One node per client ────────────────────────────────────────────────
+    // ── One client block per client (always 3-tier: group → client → phone) ──
     clients.forEach(({ clientId, client, phones }) => {
-      const isMulti = phones.length > 1;
+      const clientBlock = document.createElement('div');
+      clientBlock.className = 'client-block';
 
-      if (!isMulti) {
-        // ── Single-phone client: leaf row (same as before) ─────────────────
-        const contact = phones[0];
+      const clientHeader = document.createElement('div');
+      clientHeader.className = 'client-header';
+      clientHeader.innerHTML = `
+        <label class="client-label">
+          <input type="checkbox" class="client-checkbox"
+                 data-group="${esc(group)}"
+                 data-clientid="${esc(clientId)}" />
+          <span class="client-name">${esc(client)}</span>
+          <span class="group-badge">${phones.length}</span>
+        </label>
+        <button class="btn-toggle btn-toggle--client" data-clientid="${esc(clientId)}"
+                aria-expanded="false">Show</button>`;
+      clientBlock.appendChild(clientHeader);
+
+      const phonesDiv = document.createElement('div');
+      phonesDiv.className = 'phones-list hidden';
+      phonesDiv.dataset.clientid = clientId;
+
+      phones.forEach((contact) => {
         const row = document.createElement('label');
-        row.className = 'contact-row';
+        row.className = 'contact-row contact-row--phone';
         row.innerHTML = `
           <input type="checkbox" class="contact-checkbox"
                  data-chatid="${esc(contact.chatId)}"
                  data-group="${esc(group)}"
                  data-clientid="${esc(clientId)}" />
-          <span class="contact-name">${esc(contact.name)}</span>
+          <span class="contact-name">${esc(contact.role || contact.name)}</span>
           <span class="contact-phone">+${esc(contact.phone)}</span>`;
-        contactsDiv.appendChild(row);
-      } else {
-        // ── Multi-phone client: expandable client block ────────────────────
-        const clientBlock = document.createElement('div');
-        clientBlock.className = 'client-block';
+        phonesDiv.appendChild(row);
+      });
 
-        const clientHeader = document.createElement('div');
-        clientHeader.className = 'client-header';
-        clientHeader.innerHTML = `
-          <label class="client-label">
-            <input type="checkbox" class="client-checkbox"
-                   data-group="${esc(group)}"
-                   data-clientid="${esc(clientId)}" />
-            <span class="client-name">${esc(client)}</span>
-            <span class="group-badge">${phones.length}</span>
-          </label>
-          <button class="btn-toggle btn-toggle--client" data-clientid="${esc(clientId)}"
-                  aria-expanded="false">Show</button>`;
-        clientBlock.appendChild(clientHeader);
+      clientBlock.appendChild(phonesDiv);
+      contactsDiv.appendChild(clientBlock);
 
-        const phonesDiv = document.createElement('div');
-        phonesDiv.className = 'phones-list hidden';
-        phonesDiv.dataset.clientid = clientId;
+      clientHeader.querySelector('.btn-toggle--client').addEventListener('click', (e) => {
+        const btn = e.currentTarget;
+        const expanded = btn.getAttribute('aria-expanded') === 'true';
+        phonesDiv.classList.toggle('hidden', expanded);
+        btn.setAttribute('aria-expanded', String(!expanded));
+        btn.textContent = expanded ? 'Show' : 'Hide';
+      });
 
-        phones.forEach((contact) => {
-          const row = document.createElement('label');
-          row.className = 'contact-row contact-row--phone';
-          row.innerHTML = `
-            <input type="checkbox" class="contact-checkbox"
-                   data-chatid="${esc(contact.chatId)}"
-                   data-group="${esc(group)}"
-                   data-clientid="${esc(clientId)}" />
-            <span class="contact-name">${esc(contact.role || contact.name)}</span>
-            <span class="contact-phone">+${esc(contact.phone)}</span>`;
-          phonesDiv.appendChild(row);
+      clientHeader.querySelector('.client-checkbox').addEventListener('change', (e) => {
+        const checked = e.target.checked;
+        phonesDiv.querySelectorAll('.contact-checkbox').forEach((cb) => {
+          cb.checked = checked;
+          checked ? selectedChatIds.add(cb.dataset.chatid) : selectedChatIds.delete(cb.dataset.chatid);
         });
-
-        clientBlock.appendChild(phonesDiv);
-        contactsDiv.appendChild(clientBlock);
-
-        // Client toggle
-        clientHeader.querySelector('.btn-toggle--client').addEventListener('click', (e) => {
-          const btn = e.currentTarget;
-          const expanded = btn.getAttribute('aria-expanded') === 'true';
-          phonesDiv.classList.toggle('hidden', expanded);
-          btn.setAttribute('aria-expanded', String(!expanded));
-          btn.textContent = expanded ? 'Show' : 'Hide';
-        });
-
-        // Client checkbox cascades to its phone checkboxes
-        clientHeader.querySelector('.client-checkbox').addEventListener('change', (e) => {
-          const checked = e.target.checked;
-          phonesDiv.querySelectorAll('.contact-checkbox').forEach((cb) => {
-            cb.checked = checked;
-            checked ? selectedChatIds.add(cb.dataset.chatid) : selectedChatIds.delete(cb.dataset.chatid);
-          });
-          syncGroupCheckbox(group);
-          updateSelectionUI();
-        });
-      }
+        syncGroupCheckbox(group);
+        updateSelectionUI();
+      });
     });
 
     block.appendChild(contactsDiv);
