@@ -19,6 +19,18 @@ const {
   SHEETS_CREDENTIALS_FILE,
 } = require('./config');
 
+let _googleOAuth;
+function _isGoogleOAuthConnected() {
+  if (_googleOAuth === undefined) {
+    try {
+      _googleOAuth = require('./google-auth/oauth');
+    } catch {
+      _googleOAuth = null;
+    }
+  }
+  return _googleOAuth?.isConnected() || false;
+}
+
 const DATA_DIR      = path.resolve(process.cwd(), 'data');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 
@@ -60,10 +72,18 @@ if (!_state) {
 
 // ── public API ─────────────────────────────────────────────────────────────────
 
-/** True when credentials are configured and at least one source has an ID. */
+/** True when Google is ready to sync (OAuth connected or legacy service account). */
 function isConfigured() {
   const active = getActive();
-  return !!(SHEETS_CREDENTIALS_FILE && active && active.id);
+  if (!active?.id) return false;
+
+  if (_isGoogleOAuthConnected()) return true;
+
+  // Legacy developer path — service account JSON on disk
+  const credPath = path.isAbsolute(SHEETS_CREDENTIALS_FILE)
+    ? SHEETS_CREDENTIALS_FILE
+    : path.resolve(process.cwd(), SHEETS_CREDENTIALS_FILE);
+  return fs.existsSync(credPath);
 }
 
 /** All saved sources. */
@@ -129,6 +149,28 @@ function updateTab(index, tabName) {
   _write(_state);
 }
 
+/**
+ * Set the active source's spreadsheet (used by Google OAuth sheet picker).
+ */
+function setActiveSource({ id, name, tabName = '' }) {
+  if (!id) throw new Error('Spreadsheet ID is required.');
+
+  if (_state.sources.length === 0) {
+    add({ id, name: name || 'Google Sheet', tabName });
+    _state.activeIndex = 0;
+    _write(_state);
+    return 0;
+  }
+
+  _state.sources[_state.activeIndex] = {
+    id,
+    name: (name || 'Google Sheet').trim(),
+    tabName: (tabName || '').trim(),
+  };
+  _write(_state);
+  return _state.activeIndex;
+}
+
 // ── internal ──────────────────────────────────────────────────────────────────
 
 function _validateIndex(index) {
@@ -137,4 +179,7 @@ function _validateIndex(index) {
   }
 }
 
-module.exports = { isConfigured, getAll, getActive, getActiveIndex, add, remove, activate, updateTab };
+module.exports = {
+  isConfigured, getAll, getActive, getActiveIndex,
+  add, remove, activate, updateTab, setActiveSource,
+};

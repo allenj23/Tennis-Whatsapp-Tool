@@ -9,8 +9,19 @@
 <body>
   <header>
     <h1>WhatsApp Campaign Tool</h1>
-    <span id="server-status" class="badge badge--offline">Connecting...</span>
+    <div class="header-badges">
+      <div id="google-header-account" class="header-account hidden">
+        <span id="google-header-badge" class="badge badge--online"></span>
+        <button type="button" id="btn-google-disconnect" class="row-action">Sign out</button>
+      </div>
+      <span id="server-status" class="badge badge--offline">Connecting...</span>
+    </div>
   </header>
+
+  <div id="google-reconnect-banner" class="reconnect-banner hidden" role="alert">
+    <span id="google-reconnect-msg">Google connection lost.</span>
+    <a class="btn btn--google btn--sm" href="/api/google/auth/login">Reconnect Google</a>
+  </div>
 
   <main>
     <!-- Step 1: Connect to WhatsApp -->
@@ -33,9 +44,12 @@
 
       <!-- Ready / connected state -->
       <div id="wa-state-ready" class="hidden">
-        <div class="connected-banner">
-          <span class="badge badge--online">Connected</span>
-          <span id="wa-connected-name"></span>
+        <div class="connection-row connected-banner">
+          <div class="connection-row__status">
+            <span class="badge badge--online">Connected</span>
+            <span id="wa-connected-name"></span>
+          </div>
+          <button id="btn-wa-disconnect" class="row-action" type="button">Sign out</button>
         </div>
       </div>
 
@@ -46,45 +60,95 @@
       </div>
     </section>
 
-    <!-- Step 2: Load Contact List -->
+    <!-- Step 2: Connect contacts (Google Sheets or Excel fallback) -->
     <section id="step-upload" class="step hidden">
-      <h2>Step 2 — Load Contact List</h2>
+      <h2 id="step-upload-title">Step 2 — Connect your contacts</h2>
 
-      <!-- Google Sheets sources panel — shown only when credentials are configured -->
+      <!-- OAuth setup wizard (customer path) -->
+      <div id="google-panel" class="hidden">
+        <div class="wizard-track" id="wizard-track">
+          <div class="wizard-step" id="wiz-step-google">
+            <span class="wizard-num">1</span>
+            <span class="wizard-label">Sign in with Google</span>
+          </div>
+          <div class="wizard-step" id="wiz-step-sheet">
+            <span class="wizard-num">2</span>
+            <span class="wizard-label">Choose spreadsheet</span>
+          </div>
+        </div>
+
+        <div id="google-signin-block">
+          <p class="wizard-prompt">Sign in with the Google account that can open your club's contacts spreadsheet.</p>
+          <a id="btn-google-signin" class="btn btn--google" href="/api/google/auth/login">Sign in with Google</a>
+        </div>
+
+        <div id="google-sheet-picker" class="hidden">
+          <p id="google-auth-status" class="status-text"></p>
+          <div class="field">
+            <label for="google-sheet-select">Spreadsheet</label>
+            <select id="google-sheet-select">
+              <option value="">Loading…</option>
+            </select>
+          </div>
+          <button id="btn-google-connect" class="btn btn--primary" type="button" disabled>Connect spreadsheet</button>
+        </div>
+
+        <div id="google-connected-panel" class="hidden">
+          <div class="connection-row connected-banner">
+            <div class="connection-row__status">
+              <span class="badge badge--online">Connected</span>
+              <span id="google-sheet-summary"></span>
+            </div>
+            <button id="btn-change-sheet" class="row-action" type="button">Change spreadsheet</button>
+          </div>
+          <div class="field">
+            <label for="google-connected-tab-select">Worksheet tab</label>
+            <select id="google-connected-tab-select">
+              <option value="">Loading…</option>
+            </select>
+          </div>
+        </div>
+
+        <p id="google-error" class="error-text hidden"></p>
+      </div>
+
+      <!-- Sync status (OAuth compact view + legacy multi-source view) -->
       <div id="sources-panel" class="hidden">
         <div class="sources-panel-header">
           <span class="sheets-icon">📊</span>
-          <strong>Contact Sources</strong>
+          <strong id="sources-panel-title">Contact Sources</strong>
           <span id="sync-badge" class="badge badge--offline">Not synced</span>
         </div>
         <p id="sync-last-time" class="status-text"></p>
-
-        <!-- Saved sources list -->
-        <div id="sources-list"></div>
-
-        <!-- Add-source form (hidden until button clicked) -->
-        <div id="add-source-form" class="add-source-form hidden">
-          <input type="text" id="add-source-url"  placeholder="Paste Google Sheet URL…" autocomplete="off" />
-          <input type="text" id="add-source-name" placeholder="Give it a name…" autocomplete="off" />
-          <div class="add-source-actions">
-            <button id="btn-confirm-add" class="btn btn--primary btn--sm">Add</button>
-            <button id="btn-cancel-add"  class="btn btn--secondary btn--sm">Cancel</button>
-          </div>
-          <p id="add-source-error" class="error-text hidden"></p>
+        <div id="oauth-sync-actions" class="hidden">
+          <button id="btn-sync" class="btn btn--secondary btn--sm" type="button">↻ Sync now</button>
         </div>
-
-        <button id="btn-show-add" class="btn btn--secondary btn--sm">+ Add sheet</button>
-        <button id="btn-sync"     class="btn btn--secondary btn--sm">↻ Sync now</button>
-
+        <div id="sources-list"></div>
+        <div id="legacy-source-actions">
+          <div id="add-source-form" class="add-source-form hidden">
+            <input type="text" id="add-source-url"  placeholder="Paste Google Sheet URL…" autocomplete="off" />
+            <input type="text" id="add-source-name" placeholder="Give it a name…" autocomplete="off" />
+            <div class="add-source-actions">
+              <button id="btn-confirm-add" class="btn btn--primary btn--sm">Add</button>
+              <button id="btn-cancel-add"  class="btn btn--secondary btn--sm">Cancel</button>
+            </div>
+            <p id="add-source-error" class="error-text hidden"></p>
+          </div>
+          <button id="btn-show-add" class="btn btn--secondary btn--sm">+ Add sheet</button>
+          <button id="btn-sync-legacy" class="btn btn--secondary btn--sm">↻ Sync now</button>
+        </div>
         <div id="sync-summary"></div>
-        <hr class="divider" />
       </div>
 
-      <p>Upload an Excel file with columns: <strong>Name | Phone | Group</strong></p>
-      <label class="file-label">
-        <input type="file" id="excel-file" accept=".xlsx,.xls" />
-      </label>
-      <div id="upload-summary"></div>
+      <!-- Excel fallback — hidden when OAuth is the customer path -->
+      <div id="excel-fallback">
+        <hr class="divider" />
+        <p>Or upload an Excel file with columns: <strong>Name | Phone | Group</strong></p>
+        <label class="file-label">
+          <input type="file" id="excel-file" accept=".xlsx,.xls" />
+        </label>
+        <div id="upload-summary"></div>
+      </div>
     </section>
 
     <!-- Step 3: Select Recipients -->

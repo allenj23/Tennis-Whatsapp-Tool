@@ -15,10 +15,48 @@ body {
 header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
   padding: 16px 24px;
   background: #ffffff;
   border-bottom: 1px solid #e0e0e0;
+}
+
+.header-badges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Account chip + subtle sign-out (header) */
+.header-account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 4px 4px 10px;
+  background: #f8f9fa;
+  border: 1px solid #e8e8e8;
+  border-radius: 999px;
+}
+
+.header-account.hidden {
+  display: none;
+}
+
+.reconnect-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 24px;
+  background: #fff3cd;
+  border-bottom: 1px solid #ffc107;
+  font-size: 14px;
+}
+
+.reconnect-banner.hidden {
+  display: none;
 }
 
 header h1 {
@@ -105,6 +143,88 @@ main {
 .btn--primary:disabled {
   background: #a8e6c3;
   cursor: not-allowed;
+}
+
+.btn--google {
+  background: #4285f4;
+  color: #fff;
+}
+
+.btn--google:hover {
+  background: #3367d6;
+}
+
+/* Setup wizard (OAuth onboarding) */
+.wizard-track {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.wizard-step {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background: #fafafa;
+  font-size: 13px;
+  color: #888;
+}
+
+.wizard-step--active {
+  border-color: #4285f4;
+  background: #f0f6ff;
+  color: #1a1a1a;
+  font-weight: 600;
+}
+
+.wizard-step--done {
+  border-color: #b7dfc8;
+  background: #f0faf4;
+  color: #155724;
+}
+
+.wizard-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: #e0e0e0;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.wizard-step--active .wizard-num {
+  background: #4285f4;
+  color: #fff;
+}
+
+.wizard-step--done .wizard-num {
+  background: #25d366;
+  color: #fff;
+}
+
+.wizard-prompt {
+  margin-bottom: 14px;
+  color: #444;
+  font-size: 14px;
+}
+
+.wizard-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+#oauth-sync-actions {
+  margin-top: 8px;
 }
 
 /* Form fields */
@@ -624,4 +744,54 @@ input[type="file"] {
   font-size: 14px;
   font-weight: 500;
   color: #155724;
+}
+
+/* Status row: identity left, subtle action right */
+.connection-row {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.connection-row__status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.connection-row__status > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Muted text action — clear but not intimidating (web.dev: use button semantics) */
+.row-action {
+  background: none;
+  border: none;
+  padding: 2px 0;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  color: #6b7280;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.row-action:hover {
+  color: #374151;
+  text-decoration: underline;
+}
+
+.row-action:focus-visible {
+  outline: 2px solid #4285f4;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.header-account .row-action {
+  font-size: 12px;
+  padding: 2px 6px;
 }

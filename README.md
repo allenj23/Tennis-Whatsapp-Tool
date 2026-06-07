@@ -153,6 +153,25 @@ Or set the environment variable `SHEETS_POLL_INTERVAL_MS` before starting.
 
 ---
 
+## Google OAuth (customer path — branch `feature/google-oauth-spike`)
+
+Step 2 supports **Sign in with Google → pick spreadsheet → switch tabs → sync**. Vendor OAuth credentials are configured once by you (not the club manager).
+
+Rollout plan: [docs/GOOGLE_OAUTH_ROLLOUT.md](docs/GOOGLE_OAUTH_ROLLOUT.md)  
+Release build (vendor): [docs/RELEASE.md](docs/RELEASE.md)  
+Customer install guide: [README-INSTALL.md](README-INSTALL.md)  
+Spike notes: [docs/OAUTH_SPIKE.md](docs/OAUTH_SPIKE.md)
+
+### Windows release (vendor)
+
+```powershell
+npm run build:release
+```
+
+Produces `dist/WhatsApp-Campaign-Tool/` and optionally `dist/WhatsAppCampaignTool-Setup.exe`.
+
+---
+
 ## Notes
 
 - The app is **single-user** and runs locally — no authentication is required.

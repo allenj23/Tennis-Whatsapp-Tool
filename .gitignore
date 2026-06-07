@@ -12,3 +12,12 @@ data/
 *credentials*.json
 *.serviceaccount.json
 whatsapp-tools-*.json
+
+# Vendor Google OAuth credentials (never commit)
+oauth-spike.credentials.json
+vendor-google-oauth.json
+src/google-auth/baked-credentials.js
+
+# Release builds
+dist/
+release/

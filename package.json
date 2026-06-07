@@ -5,7 +5,9 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "test": "node --test \"test/**/*.test.js\""
+    "test": "node --test \"test/**/*.test.js\"",
+    "bake-oauth": "node scripts/bake-oauth.js",
+    "build:release": "powershell -ExecutionPolicy Bypass -File scripts/build-release.ps1"
   },
   "dependencies": {
     "express": "^4.19.2",

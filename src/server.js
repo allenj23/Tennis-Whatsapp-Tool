@@ -23,6 +23,9 @@ let isSending = false;
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
+// Customer Google OAuth (vendor-owned Cloud project).
+require('./google-auth/routes').mount(app);
+
 // ── Upload contact list (Excel) ────────────────────────────────────────────────
 app.post('/api/upload', upload.single('file'), (req, res) => {
   if (!req.file) {
@@ -116,10 +119,29 @@ app.get('/api/sources/:index/tabs', async (req, res) => {
     const source = sources.getAll()[index];
     if (!source) return res.status(404).json({ error: 'Source not found.' });
 
-    const tabs = await sheets.fetchSheetTabs(source.id);
+    const googleOAuth = require('./google-auth/oauth');
+    const googleSheets = require('./google-auth/sheets');
+    let tabs;
+    if (googleOAuth.isConnected()) {
+      const meta = await googleSheets.fetchSheetTabs(source.id);
+      tabs = meta.tabs;
+    } else {
+      tabs = await sheets.fetchSheetTabs(source.id);
+    }
     res.json({ tabs });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ── WhatsApp disconnect ───────────────────────────────────────────────────────
+app.post('/api/whatsapp/disconnect', async (_req, res) => {
+  try {
+    await whatsapp.disconnect(io);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('WhatsApp disconnect error:', err.message);
+    res.status(500).json({ error: err.message || 'Failed to disconnect WhatsApp.' });
   }
 });
 
@@ -176,7 +198,13 @@ app.post('/api/send', upload.single('media'), async (req, res) => {
 io.on('connection', (socket) => {
   console.log('Browser connected:', socket.id);
 
-  socket.emit('server:ready', { sheetsConfigured: sources.isConfigured() });
+  const googleAuth = require('./google-auth/oauth');
+  const googleCfg  = require('./google-auth/config');
+  socket.emit('server:ready', {
+    sheetsConfigured: sources.isConfigured(),
+    googleOAuthMode:  googleCfg.isVendorConfigured(),
+    googleConnected:  googleAuth.isConnected(),
+  });
 
   // Sync WhatsApp state
   const { state, info } = whatsapp.getStatus();
@@ -204,7 +232,14 @@ io.on('connection', (socket) => {
 
 whatsapp.init(io);
 
-server.listen(PORT, () => {
-  console.log(`WhatsApp Campaign Tool running at http://localhost:${PORT}`);
+const HOST = process.env.HOST || '127.0.0.1';
+
+server.listen(PORT, HOST, () => {
+  const url = `http://${HOST}:${PORT}`;
+  console.log(`WhatsApp Campaign Tool running at ${url}`);
+  if (require('./google-auth/config').isVendorConfigured()) {
+    console.log(`[google-auth] OAuth redirect: ${require('./google-auth/config').redirectUri}`);
+  }
   sync.start(io);
 });
+

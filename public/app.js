@@ -23,8 +23,31 @@ const waStatus         = document.getElementById('wa-status');
 const waConnectedName  = document.getElementById('wa-connected-name');
 const waErrorMsg       = document.getElementById('wa-error-msg');
 
-const stepUpload       = document.getElementById('step-upload');
-const sourcesPanel    = document.getElementById('sources-panel');
+const stepUpload         = document.getElementById('step-upload');
+const googlePanel        = document.getElementById('google-panel');
+const googleSigninBlock  = document.getElementById('google-signin-block');
+const googleSheetPicker       = document.getElementById('google-sheet-picker');
+const googleConnectedPanel    = document.getElementById('google-connected-panel');
+const googleSheetSummary      = document.getElementById('google-sheet-summary');
+const googleAuthStatus        = document.getElementById('google-auth-status');
+const googleSheetSelect       = document.getElementById('google-sheet-select');
+const googleConnectedTabSelect = document.getElementById('google-connected-tab-select');
+const btnGoogleConnect        = document.getElementById('btn-google-connect');
+const btnChangeSheet          = document.getElementById('btn-change-sheet');
+const btnGoogleDisconnect     = document.getElementById('btn-google-disconnect');
+const wizardTrack             = document.getElementById('wizard-track');
+const oauthSyncActions        = document.getElementById('oauth-sync-actions');
+const btnWaDisconnect         = document.getElementById('btn-wa-disconnect');
+const googleError        = document.getElementById('google-error');
+const googleHeaderAccount = document.getElementById('google-header-account');
+const googleHeaderBadge  = document.getElementById('google-header-badge');
+const googleReconnectBanner = document.getElementById('google-reconnect-banner');
+const googleReconnectMsg = document.getElementById('google-reconnect-msg');
+const wizStepGoogle      = document.getElementById('wiz-step-google');
+const wizStepSheet       = document.getElementById('wiz-step-sheet');
+const excelFallback      = document.getElementById('excel-fallback');
+const legacySourceActions = document.getElementById('legacy-source-actions');
+const sourcesPanel       = document.getElementById('sources-panel');
 const syncBadge       = document.getElementById('sync-badge');
 const syncLastTime    = document.getElementById('sync-last-time');
 const sourcesList     = document.getElementById('sources-list');
@@ -36,6 +59,7 @@ const btnShowAdd      = document.getElementById('btn-show-add');
 const btnConfirmAdd   = document.getElementById('btn-confirm-add');
 const btnCancelAdd    = document.getElementById('btn-cancel-add');
 const btnSync         = document.getElementById('btn-sync');
+const btnSyncLegacy   = document.getElementById('btn-sync-legacy');
 const syncSummary     = document.getElementById('sync-summary');
 const excelFile       = document.getElementById('excel-file');
 const uploadSummary   = document.getElementById('upload-summary');
@@ -66,10 +90,15 @@ const sendRetryFooter      = document.getElementById('send-retry-footer');
 const btnRetryFailed       = document.getElementById('btn-retry-failed');
 
 // ── App state ─────────────────────────────────────────────────────────────────
-let allContacts     = [];
-let allGroups       = [];
-let selectedChatIds = new Set();
-let failedChatIds   = [];
+let allContacts       = [];
+let allGroups         = [];
+let selectedChatIds   = new Set();
+let failedChatIds     = [];
+let _googleOAuthMode    = false;
+let _googleSpreadsheets = [];
+let _googleConnected    = false;
+let _sheetConfigured    = false;
+let _activeSheetLabel   = '';
 
 // ── Generic helpers ───────────────────────────────────────────────────────────
 function showWaState(state) {
@@ -93,11 +122,312 @@ socket.on('disconnect', () => {
   serverStatus.className = 'badge badge--offline';
 });
 
-socket.on('server:ready', ({ sheetsConfigured } = {}) => {
+socket.on('server:ready', ({ sheetsConfigured, googleOAuthMode, googleConnected } = {}) => {
   showWaState('waiting');
   waStatus.textContent = 'Initializing WhatsApp...';
-  if (sheetsConfigured) sourcesPanel.classList.remove('hidden');
+  _googleOAuthMode = !!googleOAuthMode;
+  _sheetConfigured = !!sheetsConfigured;
+  _googleConnected = !!googleConnected;
+
+  if (_googleOAuthMode) {
+    applyOAuthModeUi();
+    refreshGoogleUi();
+  } else if (sheetsConfigured) {
+    sourcesPanel.classList.remove('hidden');
+  }
 });
+
+function applyOAuthModeUi() {
+  googlePanel.classList.remove('hidden');
+  excelFallback.classList.add('hidden');
+  legacySourceActions.classList.add('hidden');
+  sourcesList.classList.add('hidden');
+  oauthSyncActions.classList.remove('hidden');
+  sourcesPanel.classList.remove('hidden');
+  const title = document.getElementById('sources-panel-title');
+  if (title) title.textContent = 'Sync status';
+}
+
+function showGoogleError(msg) {
+  if (!msg) {
+    googleError.classList.add('hidden');
+    googleError.textContent = '';
+    return;
+  }
+  googleError.textContent = msg;
+  googleError.classList.remove('hidden');
+}
+
+function isGoogleAuthError(msg) {
+  return /invalid_grant|not signed in|insufficient|unauthorized|revoked|token|authentication/i.test(String(msg || ''));
+}
+
+function showReconnectBanner(msg) {
+  if (!_googleOAuthMode) return;
+  googleReconnectMsg.textContent = msg || 'Google connection lost. Sign in again to resume syncing.';
+  googleReconnectBanner.classList.remove('hidden');
+}
+
+function hideReconnectBanner() {
+  googleReconnectBanner.classList.add('hidden');
+}
+
+function updateGoogleHeaderBadge(email) {
+  if (!_googleOAuthMode || !email) {
+    googleHeaderAccount.classList.add('hidden');
+    return;
+  }
+  googleHeaderBadge.textContent = email;
+  googleHeaderAccount.classList.remove('hidden');
+}
+
+function updateWizardSteps(phase) {
+  const steps = { google: wizStepGoogle, sheet: wizStepSheet };
+  Object.values(steps).forEach((el) => {
+    el.classList.remove('wizard-step--active', 'wizard-step--done');
+  });
+
+  if (phase === 'google') {
+    steps.google.classList.add('wizard-step--active');
+  } else if (phase === 'picker') {
+    steps.google.classList.add('wizard-step--done');
+    steps.sheet.classList.add('wizard-step--active');
+  } else if (phase === 'connected') {
+    steps.google.classList.add('wizard-step--done');
+    steps.sheet.classList.add('wizard-step--done');
+  }
+}
+
+function showGooglePhase(phase) {
+  googleSigninBlock.classList.toggle('hidden', phase !== 'google');
+  googleSheetPicker.classList.toggle('hidden', phase !== 'picker');
+  googleConnectedPanel.classList.toggle('hidden', phase !== 'connected');
+  wizardTrack.classList.toggle('hidden', phase === 'connected');
+  updateWizardSteps(phase);
+}
+
+async function refreshGoogleUi() {
+  if (!_googleOAuthMode) return;
+  try {
+    const status = await fetch('/api/google/status').then((r) => r.json());
+    if (!status.vendorConfigured) {
+      showGooglePhase('google');
+      showGoogleError('Google sign-in is not available.');
+      return;
+    }
+
+    _googleConnected = !!status.connected;
+    updateGoogleHeaderBadge(status.connected ? status.email : '');
+
+    if (!status.connected) {
+      showGooglePhase('google');
+      hideReconnectBanner();
+      return;
+    }
+
+    if (_sheetConfigured) {
+      await showConnectedSpreadsheet();
+      hideReconnectBanner();
+      return;
+    }
+
+    showGooglePhase('picker');
+    googleAuthStatus.textContent = `Signed in as ${status.email || 'Google user'}`;
+    await loadGoogleSpreadsheets();
+  } catch {
+    showGoogleError('Could not check Google connection status.');
+  }
+}
+
+async function showConnectedSpreadsheet() {
+  try {
+    const { sources, activeIndex } = await fetch('/api/sources').then((r) => r.json());
+    const active = sources?.[activeIndex];
+    if (active) {
+      _activeSheetLabel = active.name;
+      googleSheetSummary.textContent = active.name;
+      _sourcesData = sources;
+      _activeIndex = activeIndex;
+      await populateConnectedTabSelect(active);
+    }
+  } catch { /* non-fatal */ }
+  showGooglePhase('connected');
+}
+
+async function populateConnectedTabSelect(src) {
+  googleConnectedTabSelect.disabled = true;
+  googleConnectedTabSelect.innerHTML = '<option value="">Loading…</option>';
+  const tabs = await getTabs(src.id, _activeIndex);
+  if (tabs.length > 0) {
+    populateSelect(googleConnectedTabSelect, src, tabs);
+  } else {
+    googleConnectedTabSelect.innerHTML = '<option value="">No tabs found</option>';
+  }
+  googleConnectedTabSelect.disabled = false;
+}
+
+async function loadGoogleSpreadsheets() {
+  googleSheetSelect.innerHTML = '<option value="">Loading…</option>';
+  btnGoogleConnect.disabled = true;
+  try {
+    const res  = await fetch('/api/google/spreadsheets');
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to load spreadsheets');
+    _googleSpreadsheets = data.spreadsheets || [];
+    if (_googleSpreadsheets.length === 0) {
+      googleSheetSelect.innerHTML = '<option value="">No spreadsheets found</option>';
+      return;
+    }
+    googleSheetSelect.innerHTML = '<option value="">— Choose a spreadsheet —</option>' +
+      _googleSpreadsheets.map((s) =>
+        `<option value="${esc(s.id)}">${esc(s.name)}</option>`
+      ).join('');
+  } catch (err) {
+    if (err.message && isGoogleAuthError(err.message)) {
+      showReconnectBanner(err.message);
+    } else {
+      showGoogleError(err.message);
+    }
+    googleSheetSelect.innerHTML = '<option value="">Failed to load</option>';
+  }
+}
+
+googleSheetSelect.addEventListener('change', (e) => {
+  showGoogleError('');
+  btnGoogleConnect.disabled = !e.target.value;
+});
+
+btnGoogleConnect.addEventListener('click', async () => {
+  const spreadsheetId = googleSheetSelect.value;
+  const picked        = _googleSpreadsheets.find((s) => s.id === spreadsheetId);
+  if (!spreadsheetId) return;
+
+  btnGoogleConnect.disabled = true;
+  showGoogleError('');
+  try {
+    const res  = await fetch('/api/google/select-source', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        spreadsheetId,
+        name: picked?.name || 'Google Sheet',
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to connect spreadsheet');
+
+    _sheetConfigured = true;
+    _sourcesData = data.sources || [];
+    _activeIndex = data.activeIndex ?? 0;
+    const active = _sourcesData[_activeIndex];
+    if (active) {
+      _activeSheetLabel = active.name;
+      googleSheetSummary.textContent = active.name;
+      await populateConnectedTabSelect(active);
+    }
+    showGooglePhase('connected');
+    hideReconnectBanner();
+    showGoogleError('');
+    syncSummary.innerHTML = '';
+  } catch (err) {
+    if (isGoogleAuthError(err.message)) {
+      showReconnectBanner(err.message);
+    } else {
+      showGoogleError(err.message);
+    }
+  } finally {
+    btnGoogleConnect.disabled = !googleSheetSelect.value;
+  }
+});
+
+btnChangeSheet.addEventListener('click', async () => {
+  showGooglePhase('picker');
+  try {
+    const status = await fetch('/api/google/status').then((r) => r.json());
+    googleAuthStatus.textContent = `Signed in as ${status.email || 'Google user'}`;
+  } catch { /* ignore */ }
+  await loadGoogleSpreadsheets();
+});
+
+googleConnectedTabSelect.addEventListener('change', async () => {
+  const tabName = googleConnectedTabSelect.value;
+  if (!tabName) return;
+  googleConnectedTabSelect.disabled = true;
+  try {
+    const res  = await fetch(`/api/sources/${_activeIndex}`, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ tabName }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to switch tab');
+    _sourcesData = data.sources || [];
+    const active = _sourcesData[data.activeIndex ?? _activeIndex];
+    if (active) {
+      const src = _sourcesData[_activeIndex];
+      if (src) _tabsCache[src.id] = _tabsCache[src.id];
+      populateSelect(googleConnectedTabSelect, active, await getTabs(active.id, _activeIndex));
+    }
+  } catch (err) {
+    if (isGoogleAuthError(err.message)) {
+      showReconnectBanner(err.message);
+    } else {
+      showGoogleError(err.message);
+    }
+  } finally {
+    googleConnectedTabSelect.disabled = false;
+  }
+});
+
+btnGoogleDisconnect.addEventListener('click', async () => {
+  if (!confirm('Sign out of Google? You will need to sign in again to sync contacts.')) return;
+  btnGoogleDisconnect.disabled = true;
+  try {
+    await fetch('/api/google/disconnect', { method: 'POST' });
+    _googleConnected = false;
+    _sheetConfigured = false;
+    _sourcesData = [];
+    updateGoogleHeaderBadge('');
+    hideReconnectBanner();
+    showGoogleError('');
+    syncBadge.textContent = 'Not synced';
+    syncBadge.className = 'badge badge--offline';
+    syncLastTime.textContent = '';
+    lockStep(stepRecipients);
+    showGooglePhase('google');
+  } catch {
+    showGoogleError('Could not disconnect Google.');
+  } finally {
+    btnGoogleDisconnect.disabled = false;
+  }
+});
+
+btnWaDisconnect.addEventListener('click', async () => {
+  if (!confirm('Sign out of WhatsApp? You will need to scan the QR code again.')) return;
+  btnWaDisconnect.disabled = true;
+  try {
+    const res = await fetch('/api/whatsapp/disconnect', { method: 'POST' });
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || 'Disconnect failed');
+    }
+  } catch (err) {
+    waErrorMsg.textContent = err.message;
+    showWaState('error');
+  } finally {
+    btnWaDisconnect.disabled = false;
+  }
+});
+
+// OAuth callback query params
+(() => {
+  const params = new URLSearchParams(location.search);
+  const err = params.get('google_error');
+  if (err) showGoogleError(decodeURIComponent(err));
+  if (params.get('google_connected') || params.get('google_error')) {
+    history.replaceState({}, '', location.pathname + (location.hash || '#step-upload'));
+  }
+})();
 
 // ── WhatsApp events ───────────────────────────────────────────────────────────
 socket.on('wa:qr', (dataUrl) => {
@@ -135,10 +465,19 @@ socket.on('wa:auth_failure', (msg) => {
 });
 
 socket.on('wa:disconnected', (reason) => {
-  showWaState('error');
-  waErrorMsg.textContent = `WhatsApp disconnected (${reason}).`;
-  qrContainer.innerHTML = '';
+  if (reason === 'logged_out' || String(reason).toUpperCase() === 'LOGOUT') {
+    showWaState('waiting');
+    waStatus.textContent = 'Scan the QR code with your phone.';
+    qrContainer.innerHTML = '<p class="placeholder">Waiting for QR code...</p>';
+  } else {
+    showWaState('error');
+    waErrorMsg.textContent = `WhatsApp disconnected (${reason}).`;
+    qrContainer.innerHTML = '';
+  }
   lockStep(stepUpload);
+  lockStep(stepRecipients);
+  lockStep(stepCompose);
+  lockStep(stepStatus);
 });
 
 // ── Contacts loaded (Excel upload response, page reload, or background sync) ──
@@ -495,25 +834,32 @@ function showAddError(msg) {
   addSourceError.classList.remove('hidden');
 }
 
-// Sync now button
-btnSync.addEventListener('click', async () => {
-  btnSync.disabled = true;
+async function triggerManualSync(btn) {
+  if (btn) btn.disabled = true;
   syncSummary.innerHTML = '';
   setSyncStatus('syncing');
   try {
     const res  = await fetch('/api/sync', { method: 'POST' });
     const data = await res.json();
     if (!res.ok) {
-      syncSummary.innerHTML = `<p class="error-text">${esc(data.error || 'Sync failed.')}</p>`;
-      setSyncStatus('error', data.error || 'Sync failed.');
+      const msg = data.error || 'Sync failed.';
+      if (!_googleOAuthMode) {
+        syncSummary.innerHTML = `<p class="error-text">${esc(msg)}</p>`;
+      }
+      setSyncStatus('error', msg);
     }
   } catch {
-    syncSummary.innerHTML = '<p class="error-text">Could not reach the server. Is it running?</p>';
+    if (!_googleOAuthMode) {
+      syncSummary.innerHTML = '<p class="error-text">Could not reach the server. Is it running?</p>';
+    }
     setSyncStatus('error', 'No connection');
   } finally {
-    btnSync.disabled = false;
+    if (btn) btn.disabled = false;
   }
-});
+}
+
+btnSync.addEventListener('click', () => triggerManualSync(btnSync));
+btnSyncLegacy.addEventListener('click', () => triggerManualSync(btnSyncLegacy));
 
 // Sources list pushed from server (on connection and after any mutation)
 socket.on('sources:updated', ({ sources: list, activeIndex } = {}) => {
@@ -523,10 +869,10 @@ socket.on('sources:updated', ({ sources: list, activeIndex } = {}) => {
 // Sync status updates
 socket.on('sync:status', ({ status, syncedAt, total, skipped, message, sheetTitle, activeIndex } = {}) => {
   setSyncStatus(status, message, syncedAt, total, skipped, sheetTitle);
-  if (activeIndex !== undefined) highlightActiveSource(activeIndex);
+  if (activeIndex !== undefined && !_googleOAuthMode) highlightActiveSource(activeIndex);
 });
 
-function setSyncStatus(status, message, syncedAt, total, skipped) {
+function setSyncStatus(status, message, syncedAt, total, skipped, sheetTitle) {
   if (status === 'syncing') {
     syncBadge.textContent  = 'Syncing…';
     syncBadge.className    = 'badge badge--sending';
@@ -539,12 +885,23 @@ function setSyncStatus(status, message, syncedAt, total, skipped) {
     const time     = syncedAt ? new Date(syncedAt).toLocaleTimeString() : '';
     const skipNote = (skipped > 0) ? ` · ${skipped} skipped` : '';
     syncLastTime.textContent = `Last sync: ${time} — ${total} contact(s)${skipNote}`;
+    hideReconnectBanner();
+
+    if (_googleOAuthMode && sheetTitle) {
+      _sheetConfigured = true;
+      _activeSheetLabel = sheetTitle;
+      googleSheetSummary.textContent = sheetTitle;
+      showGooglePhase('connected');
+    }
     return;
   }
   if (status === 'error') {
     syncBadge.textContent    = 'Error';
     syncBadge.className      = 'badge badge--failed';
     syncLastTime.textContent = message ? `Error: ${message}` : '';
+    if (_googleOAuthMode && isGoogleAuthError(message)) {
+      showReconnectBanner(message);
+    }
     return;
   }
 }

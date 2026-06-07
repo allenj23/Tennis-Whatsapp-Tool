@@ -6,8 +6,10 @@
  * against the new spreadsheet/tab immediately.
  */
 
-const sheets  = require('./sheets');
-const sources = require('./sources');
+const sheets      = require('./sheets');
+const googleOAuth = require('./google-auth/oauth');
+const googleSheets = require('./google-auth/sheets');
+const sources     = require('./sources');
 const { buildContacts, setContacts } = require('./excel');
 const cache   = require('./cache');
 const { SHEETS_POLL_INTERVAL_MS } = require('./config');
@@ -31,6 +33,28 @@ function _scheduleNext(delayMs) {
   _timer = setTimeout(_runPoll, delayMs);
 }
 
+function _useOAuth() {
+  return googleOAuth.isConnected();
+}
+
+async function _fetchRows(spreadsheetId, tabName) {
+  if (_useOAuth()) return googleSheets.fetchRows(spreadsheetId, tabName);
+  return sheets.fetchRows(spreadsheetId, tabName);
+}
+
+async function _fetchSheetTabs(spreadsheetId) {
+  if (_useOAuth()) {
+    const meta = await googleSheets.fetchSheetTabs(spreadsheetId);
+    return meta.tabs;
+  }
+  return sheets.fetchSheetTabs(spreadsheetId);
+}
+
+async function _fetchSheetTitle(spreadsheetId) {
+  if (_useOAuth()) return googleSheets.fetchSheetTitle(spreadsheetId);
+  return sheets.fetchSheetTitle(spreadsheetId);
+}
+
 // ── core poll ──────────────────────────────────────────────────────────────────
 
 async function _runPoll() {
@@ -45,13 +69,13 @@ async function _runPoll() {
     // ── Fetch rows: single tab or all-tabs merge ─────────────────────────────
     let rows;
     if (source.tabName === '__all__') {
-      const tabs = await sheets.fetchSheetTabs(source.id);
+      const tabs = await _fetchSheetTabs(source.id);
       rows = [];
       for (const t of tabs) {
-        rows.push(...await sheets.fetchRows(source.id, t));
+        rows.push(...await _fetchRows(source.id, t));
       }
     } else {
-      rows = await sheets.fetchRows(source.id, source.tabName);
+      rows = await _fetchRows(source.id, source.tabName);
     }
 
     // dedupe=true when merging so the same contact from multiple tabs is only listed once
@@ -60,7 +84,7 @@ async function _runPoll() {
     // Fetch the real spreadsheet title once per source (cosmetic, non-critical)
     let sheetTitle = source.name;
     try {
-      sheetTitle = await sheets.fetchSheetTitle(source.id);
+      sheetTitle = await _fetchSheetTitle(source.id);
     } catch { /* keep friendly name as fallback */ }
 
     const status = {
