@@ -507,7 +507,7 @@ input[type="file"] {
   padding: 0 4px;
 }
 
-/* Inline tab selector (appears inside a source row) */
+/* Persistent tab dropdown inside each source row */
 .source-tab-select {
   padding: 3px 6px;
   border: 1px solid #ccc;
@@ -515,7 +515,13 @@ input[type="file"] {
   font-size: 12px;
   background: #fff;
   cursor: pointer;
-  max-width: 160px;
+  max-width: 170px;
+  flex-shrink: 0;
+}
+
+.tab-placeholder {
+  color: #999;
+  font-style: italic;
 }
 
 /* Extra-small button variant */

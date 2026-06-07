@@ -237,11 +237,78 @@ function renderUploadSummary({ contacts, groups, skipped }) {
 
 // ── Sources panel ─────────────────────────────────────────────────────────────
 
-let _sourcesData = []; // local mirror of server sources list
+let _sourcesData  = []; // local mirror of server sources list
+let _activeIndex  = 0;  // stored so re-renders after tab changes work correctly
+const _tabsCache  = {}; // spreadsheetId → string[] (cached to avoid refetches)
+
+/**
+ * Fetch the tab list for a source, using the in-memory cache.
+ * Caches empty array on error so we don't hammer the API on repeated failures.
+ */
+async function getTabs(sourceId, index) {
+  if (_tabsCache[sourceId] !== undefined) return _tabsCache[sourceId];
+  try {
+    const res  = await fetch(`/api/sources/${index}/tabs`);
+    const data = await res.json();
+    _tabsCache[sourceId] = res.ok ? (data.tabs || []) : [];
+  } catch {
+    _tabsCache[sourceId] = [];
+  }
+  return _tabsCache[sourceId];
+}
+
+/**
+ * Populate a <select> with the real tab list.
+ * Options: one per real tab, then "All tabs (merged)".
+ * Preselects src.tabName if set, otherwise the first real tab.
+ */
+function populateSelect(select, src, tabs) {
+  const current = select.value; // preserve what was showing while loading
+  select.innerHTML = '';
+
+  tabs.forEach((t) => {
+    const opt = document.createElement('option');
+    opt.value       = t;
+    opt.textContent = t;
+    select.appendChild(opt);
+  });
+
+  const mergeOpt = document.createElement('option');
+  mergeOpt.value       = '__all__';
+  mergeOpt.textContent = 'All tabs (merged)';
+  select.appendChild(mergeOpt);
+
+  // Preselect: saved tab → first real tab → keep whatever was seeded
+  if (src.tabName && src.tabName !== '__all__') {
+    select.value = src.tabName;
+  } else if (src.tabName === '__all__') {
+    select.value = '__all__';
+  } else {
+    select.value = tabs[0] || current;
+  }
+}
+
+/** Build the initial single-option seed shown while tabs are loading. */
+function _seedOption(src) {
+  const opt = document.createElement('option');
+  if (src.tabName === '__all__') {
+    opt.value       = '__all__';
+    opt.textContent = 'All tabs (merged)';
+  } else if (src.tabName) {
+    opt.value       = src.tabName;
+    opt.textContent = src.tabName;
+  } else {
+    opt.value       = '';
+    opt.textContent = 'Loading…';
+    opt.className   = 'tab-placeholder';
+  }
+  return opt;
+}
 
 /** Render the saved-sources list. */
 function renderSources(sourceArr, activeIndex) {
   _sourcesData = sourceArr;
+  _activeIndex = activeIndex;
   sourcesList.innerHTML = '';
 
   if (sourceArr.length === 0) {
@@ -255,31 +322,41 @@ function renderSources(sourceArr, activeIndex) {
     row.className = `source-row${isActive ? ' source-row--active' : ''}`;
     row.dataset.index = i;
 
+    // Build row skeleton (no Tab button — the select IS the control)
     row.innerHTML = `
       <div class="source-row-main">
         <span class="source-dot">${isActive ? '●' : '○'}</span>
         <span class="source-name">${esc(src.name)}</span>
-        <span class="source-tab">${_tabLabel(src.tabName)}</span>
       </div>
       <div class="source-row-actions">
         ${!isActive ? `<button class="btn btn--primary btn--xs btn-activate" data-index="${i}">Use</button>` : '<span class="source-active-label">Active</span>'}
-        <button class="btn btn--secondary btn--xs btn-edit-tab" data-index="${i}" title="Change tab">Tab ▾</button>
         ${!isActive ? `<button class="btn btn--danger btn--xs btn-remove" data-index="${i}" title="Remove">✕</button>` : ''}
       </div>`;
 
-    sourcesList.appendChild(row);
-  });
-}
+    // Build the persistent tab <select> and insert it into the actions bar
+    const select = document.createElement('select');
+    select.className     = 'source-tab-select';
+    select.dataset.index = i;
+    select.appendChild(_seedOption(src));
 
-/** Human-readable label for a tabName value. */
-function _tabLabel(tabName) {
-  if (tabName === '__all__') return '<em>All tabs (merged)</em>';
-  if (tabName)               return esc(tabName);
-  return '<em>Default tab</em>';
+    const actions = row.querySelector('.source-row-actions');
+    // Insert before the remove button (or append if no remove button)
+    const removeBtn = actions.querySelector('.btn-remove');
+    if (removeBtn) actions.insertBefore(select, removeBtn);
+    else           actions.appendChild(select);
+
+    sourcesList.appendChild(row);
+
+    // Lazily populate with the real tab list (instant if already cached)
+    getTabs(src.id, i).then((tabs) => {
+      if (tabs.length > 0) populateSelect(select, src, tabs);
+    });
+  });
 }
 
 /** Update only the active-indicator styling without a full re-render. */
 function highlightActiveSource(activeIndex) {
+  _activeIndex = activeIndex;
   sourcesList.querySelectorAll('.source-row').forEach((row, i) => {
     row.classList.toggle('source-row--active', i === activeIndex);
   });
@@ -323,83 +400,32 @@ sourcesList.addEventListener('click', async (e) => {
   }
 });
 
-// Tab dropdown — fetch real tab names and render an inline <select>
-sourcesList.addEventListener('click', async (e) => {
-  const btn = e.target.closest('.btn-edit-tab');
-  if (!btn) return;
-
-  const index = Number(btn.dataset.index);
-  const src   = _sourcesData[index];
-
-  // If a select is already open for this row, close it
-  const existingSelect = btn.closest('.source-row').querySelector('.source-tab-select');
-  if (existingSelect) { existingSelect.remove(); btn.textContent = 'Tab ▾'; return; }
-
-  btn.textContent = 'Loading…';
-  btn.disabled    = true;
-
+// Tab change — delegated handler on the persistent <select> in each row
+sourcesList.addEventListener('change', async (e) => {
+  const sel = e.target.closest('.source-tab-select');
+  if (!sel) return;
+  const index   = Number(sel.dataset.index);
+  const tabName = sel.value;
+  sel.disabled  = true;
   try {
-    const res  = await fetch(`/api/sources/${index}/tabs`);
+    const res  = await fetch(`/api/sources/${index}`, {
+      method:  'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ tabName }),
+    });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || 'Failed to load tabs.');
-
-    const select = document.createElement('select');
-    select.className = 'source-tab-select';
-
-    // Default / first tab option
-    const defaultOpt = document.createElement('option');
-    defaultOpt.value       = '';
-    defaultOpt.textContent = 'Default tab';
-    select.appendChild(defaultOpt);
-
-    // One option per real tab
-    data.tabs.forEach((t) => {
-      const opt = document.createElement('option');
-      opt.value       = t;
-      opt.textContent = t;
-      select.appendChild(opt);
-    });
-
-    // Merge-all option
-    const mergeOpt = document.createElement('option');
-    mergeOpt.value       = '__all__';
-    mergeOpt.textContent = 'All tabs (merged)';
-    select.appendChild(mergeOpt);
-
-    // Pre-select current value
-    select.value = src.tabName || '';
-
-    // Insert the select next to the button
-    btn.closest('.source-row-actions').insertBefore(select, btn);
-    btn.textContent = 'Close';
-    btn.disabled    = false;
-
-    select.addEventListener('change', async () => {
-      const tabName = select.value;
-      select.disabled = true;
-      try {
-        const patchRes  = await fetch(`/api/sources/${index}`, {
-          method:  'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ tabName }),
-        });
-        const patchData = await patchRes.json();
-        if (patchRes.ok) {
-          renderSources(patchData.sources, patchData.activeIndex);
-        } else {
-          syncSummary.innerHTML = `<p class="error-text">${esc(patchData.error)}</p>`;
-          select.disabled = false;
-        }
-      } catch {
-        syncSummary.innerHTML = '<p class="error-text">Could not reach the server.</p>';
-        select.disabled = false;
-      }
-    });
-
-  } catch (err) {
-    syncSummary.innerHTML = `<p class="error-text">${esc(err.message)}</p>`;
-    btn.textContent = 'Tab ▾';
-    btn.disabled    = false;
+    if (res.ok) {
+      // Update the cache entry so the next renderSources shows the right value
+      const src = _sourcesData[index];
+      if (src) _tabsCache[src.id] = _tabsCache[src.id]; // keep cache, renderSources will re-use it
+      renderSources(data.sources, data.activeIndex);
+    } else {
+      syncSummary.innerHTML = `<p class="error-text">${esc(data.error)}</p>`;
+      sel.disabled = false;
+    }
+  } catch {
+    syncSummary.innerHTML = '<p class="error-text">Could not reach the server.</p>';
+    sel.disabled = false;
   }
 });
 
