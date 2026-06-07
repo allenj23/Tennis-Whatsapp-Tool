@@ -100,6 +100,42 @@ Remove-Item -Recurse -Force .wwebjs_auth
 
 ---
 
+## Google Sheets sync (optional)
+
+When configured, the app automatically loads contacts from a Google Sheet and refreshes them every 60 seconds — no Excel uploads needed.
+
+### One-time setup
+
+| Step | What to do |
+|---|---|
+| 1. Google Cloud project | Go to [console.cloud.google.com](https://console.cloud.google.com) → create a project → enable **Google Sheets API** |
+| 2. Service account | IAM & Admin → Service Accounts → Create → generate a JSON key → download it into the project folder |
+| 3. Share the sheet | Open your Google Sheet → Share → add the service-account email (ends in `.iam.gserviceaccount.com`) as **Viewer** |
+| 4. Configure | Edit `src/config.js` — set `SHEETS_SPREADSHEET_ID` (the ID from the sheet URL) and `SHEETS_CREDENTIALS_FILE` (the key filename) |
+| 5. Restart | `npm.cmd start` — the sync panel appears in Step 2 automatically |
+
+The sheet must have header columns `Name`, `Phone`, `Group` (same format as the Excel upload).
+
+### What happens at runtime
+
+- **On startup**: the last saved contact list is loaded instantly from `data/contacts-cache.json`. The live poll runs in parallel.
+- **Every 60 seconds**: the app fetches the sheet. If it changed, contacts refresh automatically and any active recipient selection is reconciled (removed contacts are deselected).
+- **On failure**: the last-good contact list stays in memory. The status badge turns red with the error message. The app retries with exponential backoff (up to 10 minutes between retries).
+- **Manual sync**: click the **Sync from Google Sheets** button in Step 2 to force an immediate refresh.
+- **Excel upload**: still available as a fallback at any time.
+
+### Changing the poll interval
+
+Edit `src/config.js`:
+
+```js
+SHEETS_POLL_INTERVAL_MS: 30_000,   // 30 seconds
+```
+
+Or set the environment variable `SHEETS_POLL_INTERVAL_MS` before starting.
+
+---
+
 ## Troubleshooting
 
 | Problem | Cause | Fix |
@@ -110,12 +146,16 @@ Remove-Item -Recurse -Force .wwebjs_auth
 | "WhatsApp disconnected" in UI | Phone went offline or session timed out | Reload the page to reconnect |
 | Phone numbers show as "Failed" | Wrong country code or number format | Check that numbers include country code, or use local format (e.g. `05x`) — default country is Israel (+972) |
 | Excel file shows 0 contacts | Wrong column headers | File must have columns named exactly `Name`, `Phone`, `Group` |
+| Sync badge shows "Error: insufficient scopes" | Drive API scope missing | Enable only the Sheets API (Drive API not needed) |
+| Sync badge shows "Error: not found" | Sheet not shared with service account | Open the sheet → Share → add the service-account email as Viewer |
+| Sync badge shows "Error: key file not found" | Wrong path in `SHEETS_CREDENTIALS_FILE` | Check the filename matches the JSON key file in the project folder |
+| Contacts not updating after sheet edit | Cache served until next poll | Click "Sync from Google Sheets" for an immediate refresh |
 
 ---
 
 ## Notes
 
 - The app is **single-user** and runs locally — no authentication is required.
-- Uploaded contacts are stored **in memory only**. They are lost when the server restarts. Re-upload after each restart.
+- When Google Sheets sync is active, contacts survive restarts via `data/contacts-cache.json`. Without sync, re-upload the Excel file after each restart.
 - Messages are sent with a 2–5 second randomized delay between recipients to reduce WhatsApp spam detection risk.
 - `Sent` status means WhatsApp accepted the message, not that it was read.

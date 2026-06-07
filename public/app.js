@@ -136,11 +136,38 @@ socket.on('wa:disconnected', (reason) => {
   lockStep(stepUpload);
 });
 
-// ── Contacts sync (page reload) ───────────────────────────────────────────────
+// ── Contacts loaded (Excel upload response, page reload, or background sync) ──
 socket.on('contacts:loaded', ({ contacts, groups }) => {
+  // Preserve the current selection so we can reconcile after re-rendering.
+  const previousSelection = new Set(selectedChatIds);
+
   applyContacts(contacts, groups);
-  renderGroupsList();
+  renderGroupsList();         // clears selectedChatIds and re-renders checkboxes
   unlockStep(stepRecipients);
+
+  if (previousSelection.size === 0) return; // nothing to reconcile
+
+  // Re-apply any previously selected contacts that still exist in the new list.
+  const validIds = new Set(contacts.map((c) => c.chatId));
+  previousSelection.forEach((id) => {
+    if (validIds.has(id)) {
+      selectedChatIds.add(id);
+      const cb = groupsList.querySelector(`.contact-checkbox[data-chatid="${CSS.escape(id)}"]`);
+      if (cb) cb.checked = true;
+    }
+  });
+
+  // Sync the group-level checkboxes to reflect the restored tick-marks.
+  allGroups.forEach((g) => syncGroupCheckbox(g));
+  updateSelectionUI();
+
+  // Notify if some previously selected contacts were removed from the sheet.
+  const removedCount = previousSelection.size - selectedChatIds.size;
+  if (removedCount > 0) {
+    uploadSummary.innerHTML =
+      `<p class="warn-text">⚠ ${removedCount} previously selected contact(s) were removed ` +
+      `from the sheet and have been deselected.</p>`;
+  }
 });
 
 // ── Excel upload ──────────────────────────────────────────────────────────────

@@ -4,6 +4,9 @@ node_modules/
 uploads/
 *.log
 
+# Local data cache (contacts restored on restart)
+data/
+
 # Google service-account key files — never commit these
 *service-account*.json
 *credentials*.json

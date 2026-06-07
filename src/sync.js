@@ -11,7 +11,8 @@
  */
 
 const sheets  = require('./sheets');
-const { buildContacts } = require('./excel');
+const { buildContacts, setContacts } = require('./excel');
+const cache   = require('./cache');
 const { SHEETS_POLL_INTERVAL_MS } = require('./config');
 
 const BASE_INTERVAL_MS = SHEETS_POLL_INTERVAL_MS;
@@ -75,6 +76,14 @@ async function _runPoll() {
     _setStatus(status);
     _failureCount = 0;
 
+    // Persist to disk so the next restart can serve contacts immediately
+    cache.save({
+      contacts:   result.contacts,
+      groups:     result.groups,
+      syncedAt:   status.syncedAt,
+      sheetTitle: _sheetTitle,
+    });
+
     _broadcast('contacts:loaded', result);
     _broadcast('sync:status', status);
 
@@ -115,8 +124,25 @@ async function _runPoll() {
 function start(io) {
   _io = io;
   if (!sheets.isConfigured()) return;
+
+  // Restore from disk cache so contacts are available immediately —
+  // before the first network poll finishes (or if the sheet is unreachable).
+  const cached = cache.load();
+  if (cached) {
+    setContacts(cached.contacts, cached.groups);
+    _sheetTitle = cached.sheetTitle || null;
+    _setStatus({
+      status:     'ok',
+      sheetTitle: _sheetTitle,
+      syncedAt:   cached.syncedAt,
+      total:      cached.contacts.length,
+      skipped:    0,
+    });
+    console.log(`[sync] Restored ${cached.contacts.length} contacts from cache (${cached.syncedAt})`);
+  }
+
   console.log(`[sync] Starting — polling every ${BASE_INTERVAL_MS / 1000}s`);
-  _runPoll(); // immediate first poll so contacts load on startup
+  _runPoll(); // immediate first poll to get the latest data
 }
 
 /**

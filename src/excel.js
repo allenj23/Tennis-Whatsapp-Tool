@@ -89,4 +89,14 @@ function parseBuffer(buffer) {
 function getContacts() { return _contacts; }
 function getGroups()   { return _groups; }
 
-module.exports = { buildContacts, parseBuffer, getContacts, getGroups };
+/**
+ * Restore the in-memory store directly from a pre-built list.
+ * Used by the disk cache to repopulate contacts on startup without
+ * re-parsing or re-fetching the source.
+ */
+function setContacts(contacts, groups) {
+  _contacts = contacts;
+  _groups   = groups;
+}
+
+module.exports = { buildContacts, parseBuffer, getContacts, getGroups, setContacts };
