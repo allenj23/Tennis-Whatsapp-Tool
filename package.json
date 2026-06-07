@@ -4,7 +4,8 @@
   "description": "Internal WhatsApp campaign tool for tennis club office staff",
   "main": "src/server.js",
   "scripts": {
-    "start": "node src/server.js"
+    "start": "node src/server.js",
+    "test": "node --test \"test/**/*.test.js\""
   },
   "dependencies": {
     "express": "^4.19.2",

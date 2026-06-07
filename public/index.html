@@ -38,6 +38,12 @@
           <span id="wa-connected-name"></span>
         </div>
       </div>
+
+      <!-- Disconnected / error state -->
+      <div id="wa-state-error" class="hidden">
+        <p id="wa-error-msg" class="error-text"></p>
+        <button class="btn btn--secondary btn--sm" onclick="location.reload()">Reload page</button>
+      </div>
     </section>
 
     <!-- Step 2: Upload Excel -->
@@ -69,20 +75,33 @@
     <!-- Step 4: Compose -->
     <section id="step-compose" class="step hidden">
       <h2>Step 4 — Compose Message</h2>
-      <textarea id="message-text" rows="5" placeholder="Type your message here..."></textarea>
+      <p id="compose-recipient-count" class="status-text"></p>
+      <div class="field">
+        <label for="message-text">Message</label>
+        <textarea id="message-text" rows="5" placeholder="Type your message here..."></textarea>
+      </div>
       <div class="field">
         <label for="media-file">Attach image or PDF (optional)</label>
         <input type="file" id="media-file" accept="image/*,.pdf" />
       </div>
       <div id="media-preview"></div>
-      <button id="btn-send" class="btn btn--primary" disabled>Send</button>
+      <div class="step-footer">
+        <button id="btn-send" class="btn btn--primary" disabled>Send to <span id="btn-send-count">0</span> recipient(s)</button>
+      </div>
     </section>
 
     <!-- Step 5: Send & Status -->
     <section id="step-status" class="step hidden">
       <h2>Step 5 — Sending</h2>
+      <div id="send-overall-progress" class="overall-progress hidden">
+        <div id="send-progress-bar" class="progress-bar"><div id="send-progress-fill" class="progress-fill"></div></div>
+        <span id="send-progress-label" class="status-text"></span>
+      </div>
       <div id="send-progress"></div>
       <div id="send-summary"></div>
+      <div id="send-retry-footer" class="step-footer hidden">
+        <button id="btn-retry-failed" class="btn btn--danger">Retry failed recipients</button>
+      </div>
     </section>
   </main>
 

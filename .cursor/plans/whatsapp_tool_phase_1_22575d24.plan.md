@@ -16,10 +16,10 @@ todos:
     status: completed
   - id: compose-send
     content: "M5: Compose message + image/PDF attachment, throttled sequential sender, per-recipient delivery status over socket"
-    status: pending
+    status: completed
   - id: polish
     content: "M6: Error handling (not connected, bad file, send failures), failed-recipient retry, styling, README run instructions"
-    status: pending
+    status: completed
 isProject: false
 ---
 

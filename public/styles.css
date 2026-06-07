@@ -338,6 +338,101 @@ input[type="file"] {
   justify-content: flex-end;
 }
 
+/* Media preview */
+.media-thumb {
+  max-width: 200px;
+  max-height: 160px;
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+  margin-top: 8px;
+  display: block;
+}
+
+/* Progress bar */
+.overall-progress {
+  margin-bottom: 16px;
+}
+
+.progress-bar {
+  height: 8px;
+  background: #e9ecef;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+
+.progress-fill {
+  height: 100%;
+  background: #25d366;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+
+/* Status rows */
+.status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid #f0f0f0;
+  font-size: 13px;
+}
+
+.status-row:last-child {
+  border-bottom: none;
+}
+
+.status-name {
+  flex: 1;
+  color: #1a1a1a;
+}
+
+/* Status badges */
+.badge--pending {
+  background: #e9ecef;
+  color: #555;
+}
+
+.badge--sending {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.badge--sent {
+  background: #d4edda;
+  color: #155724;
+}
+
+.badge--failed {
+  background: #f8d7da;
+  color: #721c24;
+  cursor: help;
+}
+
+/* File attachment label */
+.file-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: #f0f0f0;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #333;
+}
+
+/* Danger button (retry) */
+.btn--danger {
+  background: #e74c3c;
+  color: #fff;
+}
+
+.btn--danger:hover {
+  background: #c0392b;
+}
+
 /* Connected banner */
 .connected-banner {
   display: flex;

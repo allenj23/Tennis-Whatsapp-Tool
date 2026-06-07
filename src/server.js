@@ -7,6 +7,7 @@ const multer = require('multer');
 const { PORT } = require('./config');
 const whatsapp = require('./whatsapp');
 const excel = require('./excel');
+const { sendCampaign } = require('./sender');
 
 const app = express();
 const server = http.createServer(app);
@@ -14,10 +15,12 @@ const io = new Server(server);
 
 const upload = multer({ storage: multer.memoryStorage() });
 
+let isSending = false; // prevent overlapping campaigns
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// ── Upload endpoint ────────────────────────────────────────────────────────────
+// ── Upload contact list ────────────────────────────────────────────────────────
 app.post('/api/upload', upload.single('file'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file provided.' });
@@ -34,6 +37,47 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
 // ── Contacts state (for page reloads) ─────────────────────────────────────────
 app.get('/api/contacts', (req, res) => {
   res.json({ contacts: excel.getContacts(), groups: excel.getGroups() });
+});
+
+// ── Send campaign ──────────────────────────────────────────────────────────────
+app.post('/api/send', upload.single('media'), async (req, res) => {
+  if (isSending) {
+    return res.status(409).json({ error: 'A send is already in progress.' });
+  }
+
+  const { state } = whatsapp.getStatus();
+  if (state !== 'ready') {
+    return res.status(400).json({ error: 'WhatsApp is not connected.' });
+  }
+
+  let chatIds;
+  try {
+    chatIds = JSON.parse(req.body.chatIds || '[]');
+  } catch {
+    return res.status(400).json({ error: 'Invalid recipient list.' });
+  }
+
+  const message = (req.body.message || '').trim();
+  if (!message && !req.file) {
+    return res.status(400).json({ error: 'Message or media is required.' });
+  }
+  if (chatIds.length === 0) {
+    return res.status(400).json({ error: 'No recipients selected.' });
+  }
+
+  const media = req.file
+    ? { buffer: req.file.buffer, mimetype: req.file.mimetype, filename: req.file.originalname }
+    : null;
+
+  // Acknowledge immediately; progress comes over socket
+  isSending = true;
+  res.json({ ok: true, total: chatIds.length });
+
+  try {
+    await sendCampaign({ chatIds, message, media, io, contacts: excel.getContacts() });
+  } finally {
+    isSending = false;
+  }
 });
 
 // ── Socket connection ──────────────────────────────────────────────────────────
