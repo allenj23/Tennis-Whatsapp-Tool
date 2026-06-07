@@ -46,9 +46,23 @@
       </div>
     </section>
 
-    <!-- Step 2: Upload Excel -->
+    <!-- Step 2: Load Contact List -->
     <section id="step-upload" class="step hidden">
-      <h2>Step 2 — Upload Contact List</h2>
+      <h2>Step 2 — Load Contact List</h2>
+
+      <!-- Google Sheets panel — shown only when SHEETS_SPREADSHEET_ID is set in config -->
+      <div id="sheets-panel" class="hidden">
+        <div class="sheets-header">
+          <span class="sheets-icon">📊</span>
+          <strong id="sheets-title">Google Sheets</strong>
+          <span id="sheets-status-badge" class="badge badge--offline">Not synced</span>
+        </div>
+        <p id="sheets-last-sync" class="status-text"></p>
+        <button id="btn-sync" class="btn btn--secondary">Sync from Google Sheets</button>
+        <div id="sync-summary"></div>
+        <hr class="divider" />
+      </div>
+
       <p>Upload an Excel file with columns: <strong>Name | Phone | Group</strong></p>
       <label class="file-label">
         <input type="file" id="excel-file" accept=".xlsx,.xls" />

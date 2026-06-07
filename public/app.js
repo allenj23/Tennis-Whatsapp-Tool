@@ -24,6 +24,12 @@ const waConnectedName  = document.getElementById('wa-connected-name');
 const waErrorMsg       = document.getElementById('wa-error-msg');
 
 const stepUpload       = document.getElementById('step-upload');
+const sheetsPanel      = document.getElementById('sheets-panel');
+const sheetsTitle      = document.getElementById('sheets-title');
+const sheetsBadge      = document.getElementById('sheets-status-badge');
+const sheetsLastSync   = document.getElementById('sheets-last-sync');
+const btnSync          = document.getElementById('btn-sync');
+const syncSummary      = document.getElementById('sync-summary');
 const excelFile        = document.getElementById('excel-file');
 const uploadSummary    = document.getElementById('upload-summary');
 
@@ -80,9 +86,12 @@ socket.on('disconnect', () => {
   serverStatus.className = 'badge badge--offline';
 });
 
-socket.on('server:ready', () => {
+socket.on('server:ready', ({ sheetsConfigured } = {}) => {
   showWaState('waiting');
   waStatus.textContent = 'Initializing WhatsApp...';
+  if (sheetsConfigured) {
+    sheetsPanel.classList.remove('hidden');
+  }
 });
 
 // ── WhatsApp events ───────────────────────────────────────────────────────────
@@ -192,6 +201,60 @@ function renderUploadSummary({ contacts, groups, skipped }) {
       <div class="tag-row">${groupTags}</div>
       ${skipNote}
     </div>`;
+}
+
+// ── Google Sheets manual sync ─────────────────────────────────────────────────
+
+btnSync.addEventListener('click', async () => {
+  btnSync.disabled = true;
+  syncSummary.innerHTML = '';
+  setSheetsStatus('syncing');
+
+  try {
+    const res  = await fetch('/api/sync', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) {
+      syncSummary.innerHTML = `<p class="error-text">${esc(data.error || 'Sync failed.')}</p>`;
+      setSheetsStatus('error', data.error || 'Sync failed.');
+    }
+    // Full result arrives via sync:status + contacts:loaded socket events
+  } catch {
+    syncSummary.innerHTML = '<p class="error-text">Could not reach the server. Is it running?</p>';
+    setSheetsStatus('error', 'No connection');
+  } finally {
+    btnSync.disabled = false;
+  }
+});
+
+socket.on('sync:status', ({ status, syncedAt, total, skipped, message, sheetTitle } = {}) => {
+  setSheetsStatus(status, message, syncedAt, total, skipped, sheetTitle);
+});
+
+function setSheetsStatus(status, message, syncedAt, total, skipped, sheetTitleText) {
+  if (sheetTitleText) {
+    sheetsTitle.textContent = sheetTitleText;
+  }
+
+  if (status === 'syncing') {
+    sheetsBadge.textContent    = 'Syncing…';
+    sheetsBadge.className      = 'badge badge--sending';
+    sheetsLastSync.textContent = '';
+    return;
+  }
+  if (status === 'ok') {
+    sheetsBadge.textContent = 'Synced ✓';
+    sheetsBadge.className   = 'badge badge--sent';
+    const time     = syncedAt ? new Date(syncedAt).toLocaleTimeString() : '';
+    const skipNote = skipped > 0 ? ` · ${skipped} skipped` : '';
+    sheetsLastSync.textContent = `Last sync: ${time} — ${total} contact(s)${skipNote}`;
+    return;
+  }
+  if (status === 'error') {
+    sheetsBadge.textContent    = 'Error';
+    sheetsBadge.className      = 'badge badge--failed';
+    sheetsLastSync.textContent = message ? `Error: ${message}` : '';
+    return;
+  }
 }
 
 // ── Recipient selection ───────────────────────────────────────────────────────

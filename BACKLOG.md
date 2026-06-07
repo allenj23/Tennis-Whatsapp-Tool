@@ -69,6 +69,18 @@ Template ideas:
 - Save the uploaded Excel file to local disk on the server.
 - Automatically reload the most recently saved Excel file when the application starts, so staff do not need to re-upload after a restart.
 
+### UI-Configurable Google Sheet (Version A)
+
+Currently the Sheet ID is set in `src/config.js` (code). Allow office staff to paste a Google Sheet URL directly into the app settings screen without editing any code.
+
+- A settings panel (accessible from the header or Step 2) where the user can paste the full Sheet URL.
+- The app extracts the ID from the URL, validates it, and persists the setting to a local file so it survives restarts.
+- The service-account credentials file path should also be configurable from the same settings panel.
+- One-time requirement: share the new sheet with the service-account email (shown on the settings screen).
+- No full OAuth / "Sign in with Google" required — service account auth stays unchanged under the hood.
+
+---
+
 ### Default Country Code Setting
 
 - The application must use a default country code when a phone number in the Excel file has no country prefix.

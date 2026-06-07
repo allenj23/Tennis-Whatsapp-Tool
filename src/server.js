@@ -6,7 +6,9 @@ const multer = require('multer');
 
 const { PORT } = require('./config');
 const whatsapp = require('./whatsapp');
-const excel = require('./excel');
+const excel    = require('./excel');
+const sheets   = require('./sheets');
+const sync     = require('./sync');
 const { sendCampaign } = require('./sender');
 
 const app = express();
@@ -37,6 +39,17 @@ app.post('/api/upload', upload.single('file'), (req, res) => {
 // ── Contacts state (for page reloads) ─────────────────────────────────────────
 app.get('/api/contacts', (req, res) => {
   res.json({ contacts: excel.getContacts(), groups: excel.getGroups() });
+});
+
+// ── Manual Google Sheets sync ──────────────────────────────────────────────────
+// Delegates to the polling service (force=true bypasses the modifiedTime check).
+// The actual result arrives via sync:status / contacts:loaded socket events.
+app.post('/api/sync', (req, res) => {
+  if (!sheets.isConfigured()) {
+    return res.status(400).json({ error: 'Google Sheets is not configured.' });
+  }
+  sync.triggerNow();
+  res.json({ ok: true });
 });
 
 // ── Send campaign ──────────────────────────────────────────────────────────────
@@ -84,7 +97,7 @@ app.post('/api/send', upload.single('media'), async (req, res) => {
 io.on('connection', (socket) => {
   console.log('Browser connected:', socket.id);
 
-  socket.emit('server:ready');
+  socket.emit('server:ready', { sheetsConfigured: sheets.isConfigured() });
 
   // Sync WhatsApp state for late-connecting browsers
   const { state, info } = whatsapp.getStatus();
@@ -94,10 +107,18 @@ io.on('connection', (socket) => {
     socket.emit('wa:authenticated');
   }
 
-  // Sync contact list if already uploaded
+  // Sync contact list if already loaded (upload or sheets sync)
   const contacts = excel.getContacts();
   if (contacts.length > 0) {
     socket.emit('contacts:loaded', { contacts, groups: excel.getGroups() });
+  }
+
+  // Send the current sheets sync status so the browser shows the right badge
+  if (sheets.isConfigured()) {
+    const syncStatus = sync.getStatus();
+    if (syncStatus.status !== 'idle') {
+      socket.emit('sync:status', syncStatus);
+    }
   }
 
   socket.on('disconnect', () => {
@@ -109,4 +130,5 @@ whatsapp.init(io);
 
 server.listen(PORT, () => {
   console.log(`WhatsApp Campaign Tool running at http://localhost:${PORT}`);
+  sync.start(io); // begin polling Google Sheets (no-op if not configured)
 });

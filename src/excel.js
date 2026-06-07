@@ -1,7 +1,7 @@
 const XLSX = require('xlsx');
 const { normalizePhone, toChatId } = require('./phone');
 
-// In-memory store — replaced on each successful upload
+// In-memory store — replaced on each successful upload or sync
 let _contacts = [];
 let _groups = [];
 
@@ -19,7 +19,52 @@ function getField(row, candidates) {
 }
 
 /**
+ * Convert an array of raw row objects (from any source — Excel, Google Sheets)
+ * into a validated contact list.
+ *
+ * This is the shared normalization path used by both:
+ *   - parseBuffer()       (Excel upload)
+ *   - sheets.fetchRows()  (Google Sheets sync, Phase 1.2)
+ *
+ * @param {object[]} rows  Each row must have Name/Phone/Group keys (case-insensitive).
+ * @returns {{ contacts: object[], groups: string[], skipped: object[] }}
+ */
+function buildContacts(rows) {
+  const contacts = [];
+  const skipped  = [];
+
+  rows.forEach((row, idx) => {
+    const name     = getField(row, ['name']);
+    const rawPhone = getField(row, ['phone']);
+    const group    = getField(row, ['group']) || 'Ungrouped';
+
+    if (!name || !rawPhone) {
+      skipped.push({ row: idx + 2, name, phone: rawPhone, reason: 'Missing name or phone' });
+      return;
+    }
+
+    const phone = normalizePhone(rawPhone);
+    if (!phone) {
+      skipped.push({ row: idx + 2, name, phone: rawPhone, reason: 'Invalid phone number' });
+      return;
+    }
+
+    contacts.push({ name, phone, chatId: toChatId(phone), group });
+  });
+
+  const groups = [...new Set(contacts.map((c) => c.group))].sort();
+
+  // Commit to the in-memory store
+  _contacts = contacts;
+  _groups   = groups;
+
+  return { contacts, groups, skipped };
+}
+
+/**
  * Parse an Excel file buffer into a contact list.
+ * Delegates row normalisation to buildContacts().
+ *
  * @param {Buffer} buffer
  * @returns {{ contacts: object[], groups: string[], skipped: object[] }}
  */
@@ -32,51 +77,16 @@ function parseBuffer(buffer) {
   }
 
   const sheet = workbook.Sheets[sheetName];
-  const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+  const rows  = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
   if (rows.length === 0) {
     throw new Error('The sheet is empty.');
   }
 
-  const contacts = [];
-  const skipped = [];
-
-  rows.forEach((row, idx) => {
-    const name  = getField(row, ['name']);
-    const rawPhone = getField(row, ['phone']);
-    const group = getField(row, ['group']) || 'Ungrouped';
-
-    if (!name || !rawPhone) {
-      skipped.push({
-        row: idx + 2,
-        name,
-        phone: rawPhone,
-        reason: 'Missing name or phone',
-      });
-      return;
-    }
-
-    const phone = normalizePhone(rawPhone);
-    if (!phone) {
-      skipped.push({
-        row: idx + 2,
-        name,
-        phone: rawPhone,
-        reason: 'Invalid phone number',
-      });
-      return;
-    }
-
-    contacts.push({ name, phone, chatId: toChatId(phone), group });
-  });
-
-  _groups = [...new Set(contacts.map((c) => c.group))].sort();
-  _contacts = contacts;
-
-  return { contacts, groups: _groups, skipped };
+  return buildContacts(rows);
 }
 
 function getContacts() { return _contacts; }
 function getGroups()   { return _groups; }
 
-module.exports = { parseBuffer, getContacts, getGroups };
+module.exports = { buildContacts, parseBuffer, getContacts, getGroups };

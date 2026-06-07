@@ -3,3 +3,9 @@ node_modules/
 .wwebjs_cache/
 uploads/
 *.log
+
+# Google service-account key files — never commit these
+*service-account*.json
+*credentials*.json
+*.serviceaccount.json
+whatsapp-tools-*.json

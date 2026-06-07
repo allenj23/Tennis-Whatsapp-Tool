@@ -1,7 +1,47 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
-const { parseBuffer } = require('../src/excel');
+const { parseBuffer, buildContacts } = require('../src/excel');
 const { makeContactsXlsx, makeXlsxBuffer } = require('./helpers/fixtures');
+
+// ── buildContacts() — unit tests (used by both Excel upload and Sheets sync) ──
+describe('buildContacts — shared normalization pipeline', () => {
+  test('valid rows produce correct contacts and groups', () => {
+    const { contacts, groups, skipped } = buildContacts([
+      { Name: 'Alice', Phone: '0501111111', Group: 'Members' },
+      { Name: 'Bob',   Phone: '0502222222', Group: 'Staff' },
+    ]);
+    assert.equal(contacts.length, 2);
+    assert.equal(skipped.length, 0);
+    assert.deepEqual(groups, ['Members', 'Staff']);
+    assert.equal(contacts[0].chatId, '972501111111@c.us');
+  });
+
+  test('empty Group falls back to Ungrouped', () => {
+    const { contacts } = buildContacts([{ Name: 'A', Phone: '0501234567', Group: '' }]);
+    assert.equal(contacts[0].group, 'Ungrouped');
+  });
+
+  test('missing name is skipped', () => {
+    const { contacts, skipped } = buildContacts([{ Name: '', Phone: '0501234567', Group: 'X' }]);
+    assert.equal(contacts.length, 0);
+    assert.equal(skipped.length, 1);
+  });
+
+  test('invalid phone is skipped', () => {
+    const { skipped } = buildContacts([{ Name: 'Bob', Phone: 'N/A', Group: 'X' }]);
+    assert.equal(skipped.length, 1);
+    assert.match(skipped[0].reason, /Invalid phone number/);
+  });
+
+  test('empty row array returns empty result without throwing', () => {
+    // This path is guarded upstream (parseBuffer throws on empty), but
+    // Google Sheets may return an empty sheet legitimately.
+    const { contacts, groups, skipped } = buildContacts([]);
+    assert.equal(contacts.length, 0);
+    assert.equal(groups.length, 0);
+    assert.equal(skipped.length, 0);
+  });
+});
 
 describe('excel.parseBuffer — happy path (expected PASS)', () => {
   test('parses valid rows into contacts with chatIds', () => {
