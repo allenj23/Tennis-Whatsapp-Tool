@@ -66,15 +66,24 @@ async function fetchRows(spreadsheetId, tabName) {
   if (values.length === 0) return [];
 
   const [headerRow, ...dataRows] = values;
-  const headers = headerRow.map((h) => String(h ?? '').trim().toLowerCase());
+
+  // Strip bidi/zero-width marks (U+200B–U+200F, U+202A–U+202E) and NBSP (U+00A0)
+  // that Google Sheets silently embeds in RTL/Hebrew cells, then collapse spaces.
+  const normalizeHeader = (h) =>
+    String(h ?? '')
+      .replace(/[\u200b-\u200f\u202a-\u202e\u00a0\ufeff]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase();
+
+  const headers = headerRow.map(normalizeHeader);
 
   return dataRows
     .filter((row) => row.some((cell) => String(cell ?? '').trim() !== ''))
     .map((row) => {
       const obj = {};
       headers.forEach((header, i) => {
-        const key = header.charAt(0).toUpperCase() + header.slice(1);
-        obj[key] = String(row[i] ?? '').trim();
+        obj[header] = String(row[i] ?? '').trim();
       });
       return obj;
     });

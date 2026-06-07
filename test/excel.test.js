@@ -152,7 +152,7 @@ describe('excel.parseBuffer — invalid rows are skipped (expected PASS)', () =>
     const { contacts, skipped } = parseBuffer(buf);
     assert.equal(contacts.length, 0);
     assert.equal(skipped.length, 1);
-    assert.match(skipped[0].reason, /Missing name or phone/);
+    assert.match(skipped[0].reason, /Missing name/);
   });
 
   test('missing phone is skipped', () => {
@@ -202,6 +202,108 @@ describe('excel.parseBuffer — structural failures (expected PASS)', () => {
   test('completely non-xlsx garbage buffer throws (not silently accepted)', () => {
     const garbage = Buffer.from('this is not a spreadsheet at all');
     assert.throws(() => parseBuffer(garbage));
+  });
+});
+
+// ── Hebrew columns + multi-phone expansion ────────────────────────────────────
+describe('buildContacts — Hebrew column names', () => {
+  test('שם הלקוח and שם קבוצה are recognised as name and group', () => {
+    const rows = [{ 'שם הלקוח': 'דנה כהן', 'טלפון שחקן': '0501111111', 'שם קבוצה': 'ג׳וניורים' }];
+    const { contacts, groups } = buildContacts(rows);
+    assert.equal(contacts.length, 1);
+    assert.equal(contacts[0].client, 'דנה כהן');
+    assert.equal(contacts[0].group,  'ג׳וניורים');
+    assert.deepEqual(groups, ['ג׳וניורים']);
+  });
+
+  test('multi-phone row expands into one contact per non-empty phone column', () => {
+    const rows = [{
+      'שם הלקוח': 'דנה כהן',
+      'טלפון שחקן': '0501111111',
+      'טלפון אמא':  '0502222222',
+      'טלפון אבא':  '0503333333',
+      'שם קבוצה':   'ג׳וניורים',
+    }];
+    const { contacts } = buildContacts(rows);
+    assert.equal(contacts.length, 3);
+    const roles = contacts.map((c) => c.role);
+    assert.deepEqual(roles, ['שחקן', 'אמא', 'אבא']);
+  });
+
+  test('display name is "client – role" for named roles', () => {
+    const rows = [{
+      'שם הלקוח': 'דנה כהן',
+      'טלפון אמא': '0502222222',
+      'שם קבוצה':  'ג׳וניורים',
+    }];
+    const { contacts } = buildContacts(rows);
+    assert.equal(contacts[0].name, 'דנה כהן – אמא');
+  });
+
+  test('generic phone column produces contact with client name as-is (no role suffix)', () => {
+    const rows = [{ 'שם הלקוח': 'ישראל ישראלי', 'טלפון': '0504444444', 'שם קבוצה': 'כדורגל' }];
+    const { contacts } = buildContacts(rows);
+    assert.equal(contacts.length, 1);
+    assert.equal(contacts[0].name, 'ישראל ישראלי');
+    assert.equal(contacts[0].role, '');
+  });
+
+  test('all contacts from a row share the same clientId', () => {
+    const rows = [{
+      'שם הלקוח': 'ביאטריס לוי',
+      'טלפון שחקן': '0501111111',
+      'טלפון אמא':  '0502222222',
+      'שם קבוצה':   'מחזור א׳',
+    }];
+    const { contacts } = buildContacts(rows);
+    const ids = [...new Set(contacts.map((c) => c.clientId))];
+    assert.equal(ids.length, 1, 'all phones from a row share one clientId');
+  });
+
+  test('within-row dedupe: identical phone in two columns is added only once', () => {
+    const rows = [{
+      'שם הלקוח': 'דוד דוד',
+      'טלפון שחקן': '0501111111',
+      'טלפון אמא':  '0501111111', // same number as player
+      'שם קבוצה':   'ותיקים',
+    }];
+    const { contacts, skipped } = buildContacts(rows);
+    assert.equal(contacts.length, 1, 'duplicate phone within row collapsed to 1');
+    assert.equal(skipped.length, 0, 'within-row dedupe is not reported as a skip');
+  });
+
+  test('row with no phone columns at all is skipped with "Missing phone"', () => {
+    const rows = [{ 'שם הלקוח': 'ללא טלפון', 'שם קבוצה': 'ותיקים' }];
+    const { contacts, skipped } = buildContacts(rows);
+    assert.equal(contacts.length, 0);
+    assert.equal(skipped.length, 1);
+    assert.match(skipped[0].reason, /Missing phone/);
+  });
+
+  test('missing name column is skipped with "Missing name"', () => {
+    const rows = [{ 'טלפון שחקן': '0501111111', 'שם קבוצה': 'ותיקים' }];
+    const { contacts, skipped } = buildContacts(rows);
+    assert.equal(contacts.length, 0);
+    assert.equal(skipped.length, 1);
+    assert.match(skipped[0].reason, /Missing name/);
+  });
+
+  test('group falls back to Ungrouped when שם קבוצה is absent', () => {
+    const rows = [{ 'שם הלקוח': 'משה', 'טלפון שחקן': '0501111111' }];
+    const { contacts } = buildContacts(rows);
+    assert.equal(contacts[0].group, 'Ungrouped');
+  });
+
+  test('multiple clients in different teams are grouped correctly', () => {
+    const rows = [
+      { 'שם הלקוח': 'אלה',  'טלפון שחקן': '0501111111', 'שם קבוצה': 'ג׳וניורים' },
+      { 'שם הלקוח': 'בר',   'טלפון שחקן': '0502222222', 'שם קבוצה': 'ותיקים'   },
+      { 'שם הלקוח': 'גל',   'טלפון שחקן': '0503333333', 'שם קבוצה': 'ג׳וניורים' },
+    ];
+    const { contacts, groups } = buildContacts(rows);
+    assert.equal(contacts.length, 3);
+    assert.deepEqual(groups, ['ג׳וניורים', 'ותיקים']);
+    assert.equal(contacts.filter((c) => c.group === 'ג׳וניורים').length, 2);
   });
 });
 

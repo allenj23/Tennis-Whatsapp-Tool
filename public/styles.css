@@ -312,6 +312,56 @@ input[type="file"] {
   background: #f0faf4;
 }
 
+/* ── Client block (multi-phone node) ───────────────────────────────────────── */
+.client-block {
+  border-top: 1px solid #f0f0f0;
+}
+
+.client-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 14px 7px 26px;
+  background: #fdfdf8;
+  cursor: default;
+}
+
+.client-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  flex: 1;
+}
+
+.client-label input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  accent-color: #25d366;
+}
+
+.client-name {
+  color: #1a1a1a;
+}
+
+/* Phone sub-rows indented further than client header */
+.contact-row--phone {
+  padding-left: 56px;
+  background: #fdfdfd;
+  font-size: 12.5px;
+}
+
+.contact-row--phone:hover {
+  background: #eef8f2;
+}
+
+.phones-list {
+  padding: 2px 0;
+}
+
 .contact-row input[type="checkbox"] {
   width: 15px;
   height: 15px;

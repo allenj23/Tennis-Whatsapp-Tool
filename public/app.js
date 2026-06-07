@@ -162,7 +162,12 @@ socket.on('contacts:loaded', ({ contacts, groups }) => {
     }
   });
 
-  // Sync the group-level checkboxes to reflect the restored tick-marks.
+  // Sync client and group checkboxes to reflect the restored tick-marks.
+  const clientIds = [...new Set(contacts.map((c) => c.clientId).filter(Boolean))];
+  clientIds.forEach((cid) => {
+    const anyCb = groupsList.querySelector(`.contact-checkbox[data-clientid="${CSS.escape(cid)}"]`);
+    if (anyCb) syncClientCheckbox(cid, anyCb.dataset.group);
+  });
   allGroups.forEach((g) => syncGroupCheckbox(g));
   updateSelectionUI();
 
@@ -544,7 +549,22 @@ function setSyncStatus(status, message, syncedAt, total, skipped) {
   }
 }
 
-// ── Recipient selection ───────────────────────────────────────────────────────
+// ── Recipient selection (3-tier: group → client → phone) ─────────────────────
+
+/**
+ * Group an array of contacts by clientId.
+ * Returns an array of { clientId, client, phones[] } in insertion order.
+ */
+function groupByClient(contacts) {
+  const map = new Map();
+  contacts.forEach((c) => {
+    if (!map.has(c.clientId)) {
+      map.set(c.clientId, { clientId: c.clientId, client: c.client || c.name, phones: [] });
+    }
+    map.get(c.clientId).phones.push(c);
+  });
+  return [...map.values()];
+}
 
 function renderGroupsList() {
   selectedChatIds.clear();
@@ -552,21 +572,22 @@ function renderGroupsList() {
   lockStep(recipientsFooter);
 
   allGroups.forEach((group) => {
-    const members = allContacts.filter((c) => c.group === group);
-    const groupId = `group-${CSS.escape(group)}`;
+    const members  = allContacts.filter((c) => c.group === group);
+    const clients  = groupByClient(members);
+    const groupId  = `group-${CSS.escape(group)}`;
 
     const block = document.createElement('div');
     block.className = 'group-block';
 
+    // ── Group header row ───────────────────────────────────────────────────
     const header = document.createElement('div');
     header.className = 'group-header';
-    // esc() group name in text position; CSS.escape used for id/data attrs (R2).
     header.innerHTML = `
       <label class="group-label">
         <input type="checkbox" class="group-checkbox"
                data-group="${esc(group)}" id="${groupId}" />
         <span class="group-name">${esc(group)}</span>
-        <span class="group-badge">${members.length}</span>
+        <span class="group-badge">${clients.length}</span>
       </label>
       <button class="btn-toggle" data-group="${esc(group)}" aria-expanded="false">Show</button>`;
     block.appendChild(header);
@@ -575,54 +596,141 @@ function renderGroupsList() {
     contactsDiv.className = 'contacts-list hidden';
     contactsDiv.id = `contacts-${CSS.escape(group)}`;
 
-    members.forEach((contact) => {
-      const row = document.createElement('label');
-      row.className = 'contact-row';
-      // esc() contact name and phone; chatId is server-generated digits + @c.us (R2).
-      row.innerHTML = `
-        <input type="checkbox" class="contact-checkbox"
-               data-chatid="${esc(contact.chatId)}"
-               data-group="${esc(group)}" />
-        <span class="contact-name">${esc(contact.name)}</span>
-        <span class="contact-phone">+${esc(contact.phone)}</span>`;
-      contactsDiv.appendChild(row);
+    // ── One node per client ────────────────────────────────────────────────
+    clients.forEach(({ clientId, client, phones }) => {
+      const isMulti = phones.length > 1;
+
+      if (!isMulti) {
+        // ── Single-phone client: leaf row (same as before) ─────────────────
+        const contact = phones[0];
+        const row = document.createElement('label');
+        row.className = 'contact-row';
+        row.innerHTML = `
+          <input type="checkbox" class="contact-checkbox"
+                 data-chatid="${esc(contact.chatId)}"
+                 data-group="${esc(group)}"
+                 data-clientid="${esc(clientId)}" />
+          <span class="contact-name">${esc(contact.name)}</span>
+          <span class="contact-phone">+${esc(contact.phone)}</span>`;
+        contactsDiv.appendChild(row);
+      } else {
+        // ── Multi-phone client: expandable client block ────────────────────
+        const clientBlock = document.createElement('div');
+        clientBlock.className = 'client-block';
+
+        const clientHeader = document.createElement('div');
+        clientHeader.className = 'client-header';
+        clientHeader.innerHTML = `
+          <label class="client-label">
+            <input type="checkbox" class="client-checkbox"
+                   data-group="${esc(group)}"
+                   data-clientid="${esc(clientId)}" />
+            <span class="client-name">${esc(client)}</span>
+            <span class="group-badge">${phones.length}</span>
+          </label>
+          <button class="btn-toggle btn-toggle--client" data-clientid="${esc(clientId)}"
+                  aria-expanded="false">Show</button>`;
+        clientBlock.appendChild(clientHeader);
+
+        const phonesDiv = document.createElement('div');
+        phonesDiv.className = 'phones-list hidden';
+        phonesDiv.dataset.clientid = clientId;
+
+        phones.forEach((contact) => {
+          const row = document.createElement('label');
+          row.className = 'contact-row contact-row--phone';
+          row.innerHTML = `
+            <input type="checkbox" class="contact-checkbox"
+                   data-chatid="${esc(contact.chatId)}"
+                   data-group="${esc(group)}"
+                   data-clientid="${esc(clientId)}" />
+            <span class="contact-name">${esc(contact.role || contact.name)}</span>
+            <span class="contact-phone">+${esc(contact.phone)}</span>`;
+          phonesDiv.appendChild(row);
+        });
+
+        clientBlock.appendChild(phonesDiv);
+        contactsDiv.appendChild(clientBlock);
+
+        // Client toggle
+        clientHeader.querySelector('.btn-toggle--client').addEventListener('click', (e) => {
+          const btn = e.currentTarget;
+          const expanded = btn.getAttribute('aria-expanded') === 'true';
+          phonesDiv.classList.toggle('hidden', expanded);
+          btn.setAttribute('aria-expanded', String(!expanded));
+          btn.textContent = expanded ? 'Show' : 'Hide';
+        });
+
+        // Client checkbox cascades to its phone checkboxes
+        clientHeader.querySelector('.client-checkbox').addEventListener('change', (e) => {
+          const checked = e.target.checked;
+          phonesDiv.querySelectorAll('.contact-checkbox').forEach((cb) => {
+            cb.checked = checked;
+            checked ? selectedChatIds.add(cb.dataset.chatid) : selectedChatIds.delete(cb.dataset.chatid);
+          });
+          syncGroupCheckbox(group);
+          updateSelectionUI();
+        });
+      }
     });
 
     block.appendChild(contactsDiv);
     groupsList.appendChild(block);
 
+    // Group toggle
     header.querySelector('.btn-toggle').addEventListener('click', (e) => {
       const btn = e.currentTarget;
-      const isExpanded = btn.getAttribute('aria-expanded') === 'true';
-      contactsDiv.classList.toggle('hidden', isExpanded);
-      btn.setAttribute('aria-expanded', String(!isExpanded));
-      btn.textContent = isExpanded ? 'Show' : 'Hide';
+      const expanded = btn.getAttribute('aria-expanded') === 'true';
+      contactsDiv.classList.toggle('hidden', expanded);
+      btn.setAttribute('aria-expanded', String(!expanded));
+      btn.textContent = expanded ? 'Show' : 'Hide';
     });
 
+    // Group checkbox cascades to all phone checkboxes in the group
     header.querySelector('.group-checkbox').addEventListener('change', (e) => {
       const checked = e.target.checked;
       contactsDiv.querySelectorAll('.contact-checkbox').forEach((cb) => {
         cb.checked = checked;
         checked ? selectedChatIds.add(cb.dataset.chatid) : selectedChatIds.delete(cb.dataset.chatid);
       });
+      // Sync all client checkboxes too
+      contactsDiv.querySelectorAll('.client-checkbox').forEach((cb) => {
+        cb.checked       = checked;
+        cb.indeterminate = false;
+      });
       updateSelectionUI();
     });
   });
 
+  // Delegated handler for individual phone checkbox changes
   groupsList.addEventListener('change', (e) => {
     if (!e.target.classList.contains('contact-checkbox')) return;
     const cb = e.target;
     cb.checked ? selectedChatIds.add(cb.dataset.chatid) : selectedChatIds.delete(cb.dataset.chatid);
+    if (cb.dataset.clientid) syncClientCheckbox(cb.dataset.clientid, cb.dataset.group);
     syncGroupCheckbox(cb.dataset.group);
     updateSelectionUI();
   });
 }
 
+/** Sync the client-level checkbox indeterminate/checked state. */
+function syncClientCheckbox(clientId, group) {
+  const clientCb = groupsList.querySelector(`.client-checkbox[data-clientid="${clientId}"]`);
+  if (!clientCb) return;
+  const phoneCbs = groupsList.querySelectorAll(`.contact-checkbox[data-clientid="${clientId}"]`);
+  const total    = phoneCbs.length;
+  const checked  = [...phoneCbs].filter((c) => c.checked).length;
+  clientCb.checked       = checked === total;
+  clientCb.indeterminate = checked > 0 && checked < total;
+}
+
+/** Sync the group-level checkbox indeterminate/checked state. */
 function syncGroupCheckbox(group) {
-  const groupCb   = groupsList.querySelector(`.group-checkbox[data-group="${group}"]`);
-  const memberCbs = groupsList.querySelectorAll(`.contact-checkbox[data-group="${group}"]`);
-  const total     = memberCbs.length;
-  const checked   = [...memberCbs].filter((c) => c.checked).length;
+  const groupCb  = groupsList.querySelector(`.group-checkbox[data-group="${group}"]`);
+  if (!groupCb) return;
+  const phoneCbs = groupsList.querySelectorAll(`.contact-checkbox[data-group="${group}"]`);
+  const total    = phoneCbs.length;
+  const checked  = [...phoneCbs].filter((c) => c.checked).length;
   groupCb.checked       = checked === total;
   groupCb.indeterminate = checked > 0 && checked < total;
 }
@@ -636,9 +744,11 @@ function updateSelectionUI() {
 btnSelectAll.addEventListener('click', () => {
   allContacts.forEach((c) => selectedChatIds.add(c.chatId));
   groupsList.querySelectorAll('.contact-checkbox').forEach((cb) => { cb.checked = true; });
+  groupsList.querySelectorAll('.client-checkbox').forEach((cb) => {
+    cb.checked = true; cb.indeterminate = false;
+  });
   groupsList.querySelectorAll('.group-checkbox').forEach((cb) => {
-    cb.checked = true;
-    cb.indeterminate = false;
+    cb.checked = true; cb.indeterminate = false;
   });
   updateSelectionUI();
 });
