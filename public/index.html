@@ -14,20 +14,39 @@
 
   <main>
     <!-- Step 1: Connect to WhatsApp -->
-    <section id="step-connect" class="step active">
+    <section id="step-connect" class="step">
       <h2>Step 1 — Connect to WhatsApp</h2>
-      <p>Scan the QR code with your phone to link WhatsApp.</p>
-      <div id="qr-container">
-        <p class="placeholder">QR code will appear here once the server is connected.</p>
+
+      <!-- Not connected state -->
+      <div id="wa-state-waiting">
+        <p>Scan the QR code with your phone to link WhatsApp.</p>
+        <div id="qr-container">
+          <p class="placeholder">Waiting for QR code...</p>
+        </div>
+        <p id="wa-status" class="status-text">Initializing...</p>
       </div>
-      <p id="wa-status" class="status-text">Not connected</p>
+
+      <!-- Authenticated / loading state -->
+      <div id="wa-state-loading" class="hidden">
+        <p class="status-text">Authenticated — loading session...</p>
+      </div>
+
+      <!-- Ready / connected state -->
+      <div id="wa-state-ready" class="hidden">
+        <div class="connected-banner">
+          <span class="badge badge--online">Connected</span>
+          <span id="wa-connected-name"></span>
+        </div>
+      </div>
     </section>
 
     <!-- Step 2: Upload Excel -->
     <section id="step-upload" class="step hidden">
       <h2>Step 2 — Upload Contact List</h2>
       <p>Upload an Excel file with columns: <strong>Name | Phone | Group</strong></p>
-      <input type="file" id="excel-file" accept=".xlsx,.xls" />
+      <label class="file-label">
+        <input type="file" id="excel-file" accept=".xlsx,.xls" />
+      </label>
       <div id="upload-summary"></div>
     </section>
 

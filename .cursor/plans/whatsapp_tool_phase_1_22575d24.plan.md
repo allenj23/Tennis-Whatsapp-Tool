@@ -7,10 +7,10 @@ todos:
     status: completed
   - id: wa-connect
     content: "M2: WhatsApp client init with LocalAuth, QR event pushed to UI over socket, connected/disconnected state handling"
-    status: pending
+    status: completed
   - id: excel
     content: "M3: Upload endpoint (multer memory) + xlsx parsing into {name,phone,group}, validation, distinct groups summary"
-    status: pending
+    status: completed
   - id: selection
     content: "M4: Recipient selection UI — group checkboxes + individual customer checkboxes, dedupe, live selected count"
     status: pending
