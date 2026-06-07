@@ -24,14 +24,21 @@ const waConnectedName  = document.getElementById('wa-connected-name');
 const waErrorMsg       = document.getElementById('wa-error-msg');
 
 const stepUpload       = document.getElementById('step-upload');
-const sheetsPanel      = document.getElementById('sheets-panel');
-const sheetsTitle      = document.getElementById('sheets-title');
-const sheetsBadge      = document.getElementById('sheets-status-badge');
-const sheetsLastSync   = document.getElementById('sheets-last-sync');
-const btnSync          = document.getElementById('btn-sync');
-const syncSummary      = document.getElementById('sync-summary');
-const excelFile        = document.getElementById('excel-file');
-const uploadSummary    = document.getElementById('upload-summary');
+const sourcesPanel    = document.getElementById('sources-panel');
+const syncBadge       = document.getElementById('sync-badge');
+const syncLastTime    = document.getElementById('sync-last-time');
+const sourcesList     = document.getElementById('sources-list');
+const addSourceForm   = document.getElementById('add-source-form');
+const addSourceUrl    = document.getElementById('add-source-url');
+const addSourceName   = document.getElementById('add-source-name');
+const addSourceError  = document.getElementById('add-source-error');
+const btnShowAdd      = document.getElementById('btn-show-add');
+const btnConfirmAdd   = document.getElementById('btn-confirm-add');
+const btnCancelAdd    = document.getElementById('btn-cancel-add');
+const btnSync         = document.getElementById('btn-sync');
+const syncSummary     = document.getElementById('sync-summary');
+const excelFile       = document.getElementById('excel-file');
+const uploadSummary   = document.getElementById('upload-summary');
 
 const stepRecipients   = document.getElementById('step-recipients');
 const groupsList       = document.getElementById('groups-list');
@@ -89,9 +96,7 @@ socket.on('disconnect', () => {
 socket.on('server:ready', ({ sheetsConfigured } = {}) => {
   showWaState('waiting');
   waStatus.textContent = 'Initializing WhatsApp...';
-  if (sheetsConfigured) {
-    sheetsPanel.classList.remove('hidden');
-  }
+  if (sheetsConfigured) sourcesPanel.classList.remove('hidden');
 });
 
 // ── WhatsApp events ───────────────────────────────────────────────────────────
@@ -230,56 +235,285 @@ function renderUploadSummary({ contacts, groups, skipped }) {
     </div>`;
 }
 
-// ── Google Sheets manual sync ─────────────────────────────────────────────────
+// ── Sources panel ─────────────────────────────────────────────────────────────
 
+let _sourcesData = []; // local mirror of server sources list
+
+/** Render the saved-sources list. */
+function renderSources(sourceArr, activeIndex) {
+  _sourcesData = sourceArr;
+  sourcesList.innerHTML = '';
+
+  if (sourceArr.length === 0) {
+    sourcesList.innerHTML = '<p class="status-text">No sheets added yet.</p>';
+    return;
+  }
+
+  sourceArr.forEach((src, i) => {
+    const isActive = i === activeIndex;
+    const row = document.createElement('div');
+    row.className = `source-row${isActive ? ' source-row--active' : ''}`;
+    row.dataset.index = i;
+
+    row.innerHTML = `
+      <div class="source-row-main">
+        <span class="source-dot">${isActive ? '●' : '○'}</span>
+        <span class="source-name">${esc(src.name)}</span>
+        <span class="source-tab">${_tabLabel(src.tabName)}</span>
+      </div>
+      <div class="source-row-actions">
+        ${!isActive ? `<button class="btn btn--primary btn--xs btn-activate" data-index="${i}">Use</button>` : '<span class="source-active-label">Active</span>'}
+        <button class="btn btn--secondary btn--xs btn-edit-tab" data-index="${i}" title="Change tab">Tab ▾</button>
+        ${!isActive ? `<button class="btn btn--danger btn--xs btn-remove" data-index="${i}" title="Remove">✕</button>` : ''}
+      </div>`;
+
+    sourcesList.appendChild(row);
+  });
+}
+
+/** Human-readable label for a tabName value. */
+function _tabLabel(tabName) {
+  if (tabName === '__all__') return '<em>All tabs (merged)</em>';
+  if (tabName)               return esc(tabName);
+  return '<em>Default tab</em>';
+}
+
+/** Update only the active-indicator styling without a full re-render. */
+function highlightActiveSource(activeIndex) {
+  sourcesList.querySelectorAll('.source-row').forEach((row, i) => {
+    row.classList.toggle('source-row--active', i === activeIndex);
+  });
+}
+
+// Activate a source
+sourcesList.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.btn-activate');
+  if (!btn) return;
+  const index = Number(btn.dataset.index);
+  btn.disabled = true;
+  try {
+    const res  = await fetch(`/api/sources/${index}/activate`, { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) renderSources(data.sources, data.activeIndex);
+    else syncSummary.innerHTML = `<p class="error-text">${esc(data.error)}</p>`;
+  } catch {
+    syncSummary.innerHTML = '<p class="error-text">Could not reach the server.</p>';
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// Remove a source
+sourcesList.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.btn-remove');
+  if (!btn) return;
+  const index = Number(btn.dataset.index);
+  const src   = _sourcesData[index];
+  if (!confirm(`Remove "${src?.name}"?`)) return;
+  btn.disabled = true;
+  try {
+    const res  = await fetch(`/api/sources/${index}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (res.ok) renderSources(data.sources, data.activeIndex);
+    else syncSummary.innerHTML = `<p class="error-text">${esc(data.error)}</p>`;
+  } catch {
+    syncSummary.innerHTML = '<p class="error-text">Could not reach the server.</p>';
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// Tab dropdown — fetch real tab names and render an inline <select>
+sourcesList.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.btn-edit-tab');
+  if (!btn) return;
+
+  const index = Number(btn.dataset.index);
+  const src   = _sourcesData[index];
+
+  // If a select is already open for this row, close it
+  const existingSelect = btn.closest('.source-row').querySelector('.source-tab-select');
+  if (existingSelect) { existingSelect.remove(); btn.textContent = 'Tab ▾'; return; }
+
+  btn.textContent = 'Loading…';
+  btn.disabled    = true;
+
+  try {
+    const res  = await fetch(`/api/sources/${index}/tabs`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Failed to load tabs.');
+
+    const select = document.createElement('select');
+    select.className = 'source-tab-select';
+
+    // Default / first tab option
+    const defaultOpt = document.createElement('option');
+    defaultOpt.value       = '';
+    defaultOpt.textContent = 'Default tab';
+    select.appendChild(defaultOpt);
+
+    // One option per real tab
+    data.tabs.forEach((t) => {
+      const opt = document.createElement('option');
+      opt.value       = t;
+      opt.textContent = t;
+      select.appendChild(opt);
+    });
+
+    // Merge-all option
+    const mergeOpt = document.createElement('option');
+    mergeOpt.value       = '__all__';
+    mergeOpt.textContent = 'All tabs (merged)';
+    select.appendChild(mergeOpt);
+
+    // Pre-select current value
+    select.value = src.tabName || '';
+
+    // Insert the select next to the button
+    btn.closest('.source-row-actions').insertBefore(select, btn);
+    btn.textContent = 'Close';
+    btn.disabled    = false;
+
+    select.addEventListener('change', async () => {
+      const tabName = select.value;
+      select.disabled = true;
+      try {
+        const patchRes  = await fetch(`/api/sources/${index}`, {
+          method:  'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ tabName }),
+        });
+        const patchData = await patchRes.json();
+        if (patchRes.ok) {
+          renderSources(patchData.sources, patchData.activeIndex);
+        } else {
+          syncSummary.innerHTML = `<p class="error-text">${esc(patchData.error)}</p>`;
+          select.disabled = false;
+        }
+      } catch {
+        syncSummary.innerHTML = '<p class="error-text">Could not reach the server.</p>';
+        select.disabled = false;
+      }
+    });
+
+  } catch (err) {
+    syncSummary.innerHTML = `<p class="error-text">${esc(err.message)}</p>`;
+    btn.textContent = 'Tab ▾';
+    btn.disabled    = false;
+  }
+});
+
+// Show add-source form
+btnShowAdd.addEventListener('click', () => {
+  addSourceForm.classList.remove('hidden');
+  btnShowAdd.classList.add('hidden');
+  addSourceUrl.focus();
+  addSourceError.classList.add('hidden');
+  addSourceError.textContent = '';
+});
+
+// Cancel add
+btnCancelAdd.addEventListener('click', () => {
+  addSourceForm.classList.add('hidden');
+  btnShowAdd.classList.remove('hidden');
+  addSourceUrl.value  = '';
+  addSourceName.value = '';
+});
+
+// Confirm add
+btnConfirmAdd.addEventListener('click', async () => {
+  const url  = addSourceUrl.value.trim();
+  const name = addSourceName.value.trim();
+  if (!url)  { showAddError('Please paste a Google Sheet URL.'); return; }
+  if (!name) { showAddError('Please give this sheet a name.'); return; }
+
+  btnConfirmAdd.disabled = true;
+  addSourceError.classList.add('hidden');
+
+  try {
+    const res  = await fetch('/api/sources', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ url, name }),
+    });
+    const data = await res.json();
+    if (!res.ok) { showAddError(data.error || 'Failed to add sheet.'); return; }
+
+    // Added successfully — close form and activate the new source
+    addSourceForm.classList.add('hidden');
+    btnShowAdd.classList.remove('hidden');
+    addSourceUrl.value  = '';
+    addSourceName.value = '';
+
+    renderSources(data.sources, data.activeIndex);
+
+    // Activate the newly added source and sync immediately
+    const newIndex = data.index;
+    const activateRes  = await fetch(`/api/sources/${newIndex}/activate`, { method: 'POST' });
+    const activateData = await activateRes.json();
+    if (activateRes.ok) renderSources(activateData.sources, activateData.activeIndex);
+  } catch {
+    showAddError('Could not reach the server.');
+  } finally {
+    btnConfirmAdd.disabled = false;
+  }
+});
+
+function showAddError(msg) {
+  addSourceError.textContent = msg;
+  addSourceError.classList.remove('hidden');
+}
+
+// Sync now button
 btnSync.addEventListener('click', async () => {
   btnSync.disabled = true;
   syncSummary.innerHTML = '';
-  setSheetsStatus('syncing');
-
+  setSyncStatus('syncing');
   try {
     const res  = await fetch('/api/sync', { method: 'POST' });
     const data = await res.json();
     if (!res.ok) {
       syncSummary.innerHTML = `<p class="error-text">${esc(data.error || 'Sync failed.')}</p>`;
-      setSheetsStatus('error', data.error || 'Sync failed.');
+      setSyncStatus('error', data.error || 'Sync failed.');
     }
-    // Full result arrives via sync:status + contacts:loaded socket events
   } catch {
     syncSummary.innerHTML = '<p class="error-text">Could not reach the server. Is it running?</p>';
-    setSheetsStatus('error', 'No connection');
+    setSyncStatus('error', 'No connection');
   } finally {
     btnSync.disabled = false;
   }
 });
 
-socket.on('sync:status', ({ status, syncedAt, total, skipped, message, sheetTitle } = {}) => {
-  setSheetsStatus(status, message, syncedAt, total, skipped, sheetTitle);
+// Sources list pushed from server (on connection and after any mutation)
+socket.on('sources:updated', ({ sources: list, activeIndex } = {}) => {
+  renderSources(list, activeIndex);
 });
 
-function setSheetsStatus(status, message, syncedAt, total, skipped, sheetTitleText) {
-  if (sheetTitleText) {
-    sheetsTitle.textContent = sheetTitleText;
-  }
+// Sync status updates
+socket.on('sync:status', ({ status, syncedAt, total, skipped, message, sheetTitle, activeIndex } = {}) => {
+  setSyncStatus(status, message, syncedAt, total, skipped, sheetTitle);
+  if (activeIndex !== undefined) highlightActiveSource(activeIndex);
+});
 
+function setSyncStatus(status, message, syncedAt, total, skipped) {
   if (status === 'syncing') {
-    sheetsBadge.textContent    = 'Syncing…';
-    sheetsBadge.className      = 'badge badge--sending';
-    sheetsLastSync.textContent = '';
+    syncBadge.textContent  = 'Syncing…';
+    syncBadge.className    = 'badge badge--sending';
+    syncLastTime.textContent = '';
     return;
   }
   if (status === 'ok') {
-    sheetsBadge.textContent = 'Synced ✓';
-    sheetsBadge.className   = 'badge badge--sent';
+    syncBadge.textContent = 'Synced ✓';
+    syncBadge.className   = 'badge badge--sent';
     const time     = syncedAt ? new Date(syncedAt).toLocaleTimeString() : '';
-    const skipNote = skipped > 0 ? ` · ${skipped} skipped` : '';
-    sheetsLastSync.textContent = `Last sync: ${time} — ${total} contact(s)${skipNote}`;
+    const skipNote = (skipped > 0) ? ` · ${skipped} skipped` : '';
+    syncLastTime.textContent = `Last sync: ${time} — ${total} contact(s)${skipNote}`;
     return;
   }
   if (status === 'error') {
-    sheetsBadge.textContent    = 'Error';
-    sheetsBadge.className      = 'badge badge--failed';
-    sheetsLastSync.textContent = message ? `Error: ${message}` : '';
+    syncBadge.textContent    = 'Error';
+    syncBadge.className      = 'badge badge--failed';
+    syncLastTime.textContent = message ? `Error: ${message}` : '';
     return;
   }
 }

@@ -1,16 +1,13 @@
 /**
  * Google Sheets polling service.
  *
- * Responsibilities:
- *   - Poll for sheet changes every SHEETS_POLL_INTERVAL_MS.
- *   - Use modifiedTime (cheap Drive call) to skip full row fetches when nothing changed.
- *   - On change: fetch rows → buildContacts() → broadcast contacts:loaded + sync:status.
- *   - On failure: keep last-good contact data, emit sync:status error, back off exponentially.
- *   - Expose triggerNow() for the manual "Sync now" button (forces a full fetch).
- *   - Expose getStatus() so late-connecting browsers get the current state immediately.
+ * Polls the active source (from sources.js) on a configurable interval.
+ * Switching sources cancels the current timer and starts a fresh poll
+ * against the new spreadsheet/tab immediately.
  */
 
 const sheets  = require('./sheets');
+const sources = require('./sources');
 const { buildContacts, setContacts } = require('./excel');
 const cache   = require('./cache');
 const { SHEETS_POLL_INTERVAL_MS } = require('./config');
@@ -21,19 +18,13 @@ const MAX_BACKOFF_MS   = 10 * 60 * 1000; // 10 minutes
 // ── module state ───────────────────────────────────────────────────────────────
 let _io           = null;
 let _timer        = null;
-let _sheetTitle   = null;  // human-readable name fetched on first success
-let _failureCount     = 0;
-let _lastStatus       = { status: 'idle' };
+let _failureCount = 0;
+let _lastStatus   = { status: 'idle' };
 
 // ── helpers ────────────────────────────────────────────────────────────────────
 
-function _setStatus(s) {
-  _lastStatus = s;
-}
-
-function _broadcast(event, data) {
-  if (_io) _io.emit(event, data);
-}
+function _setStatus(s)          { _lastStatus = s; }
+function _broadcast(event, data) { if (_io) _io.emit(event, data); }
 
 function _scheduleNext(delayMs) {
   if (_timer) clearTimeout(_timer);
@@ -43,45 +34,52 @@ function _scheduleNext(delayMs) {
 // ── core poll ──────────────────────────────────────────────────────────────────
 
 async function _runPoll() {
-  if (!sheets.isConfigured()) return;
+  if (!sources.isConfigured()) return;
 
-  _broadcast('sync:status', { status: 'syncing', sheetTitle: _sheetTitle });
+  const source = sources.getActive();
+  if (!source) return;
+
+  _broadcast('sync:status', { status: 'syncing', sheetTitle: source.name });
 
   try {
-    // ── Step 1: fetch full rows and build the contact list ───────────────────
-    // modifiedTime optimisation skipped (requires Drive API scope).
-    // Full row fetch on every tick is fine at the default 60-second interval.
-    const rows   = await sheets.fetchRows();
-    const result = buildContacts(rows);
-
-    // ── Step 3: fetch the sheet title once (non-critical) ────────────────────
-    if (!_sheetTitle) {
-      try {
-        _sheetTitle = await sheets.fetchSheetTitle();
-      } catch {
-        // title is cosmetic — don't fail the sync if this call fails
-        _sheetTitle = null;
+    // ── Fetch rows: single tab or all-tabs merge ─────────────────────────────
+    let rows;
+    if (source.tabName === '__all__') {
+      const tabs = await sheets.fetchSheetTabs(source.id);
+      rows = [];
+      for (const t of tabs) {
+        rows.push(...await sheets.fetchRows(source.id, t));
       }
+    } else {
+      rows = await sheets.fetchRows(source.id, source.tabName);
     }
 
-    // ── Step 4: broadcast results ────────────────────────────────────────────
+    // dedupe=true when merging so the same contact from multiple tabs is only listed once
+    const result = buildContacts(rows, { dedupe: source.tabName === '__all__' });
+
+    // Fetch the real spreadsheet title once per source (cosmetic, non-critical)
+    let sheetTitle = source.name;
+    try {
+      sheetTitle = await sheets.fetchSheetTitle(source.id);
+    } catch { /* keep friendly name as fallback */ }
+
     const status = {
-      status:     'ok',
-      sheetTitle: _sheetTitle,
-      syncedAt:   new Date().toISOString(),
-      total:      result.contacts.length,
-      skipped:    result.skipped.length,
+      status:      'ok',
+      sheetTitle,
+      activeIndex: sources.getActiveIndex(),
+      syncedAt:    new Date().toISOString(),
+      total:       result.contacts.length,
+      skipped:     result.skipped.length,
     };
 
     _setStatus(status);
     _failureCount = 0;
 
-    // Persist to disk so the next restart can serve contacts immediately
     cache.save({
       contacts:   result.contacts,
       groups:     result.groups,
       syncedAt:   status.syncedAt,
-      sheetTitle: _sheetTitle,
+      sheetTitle,
     });
 
     _broadcast('contacts:loaded', result);
@@ -96,9 +94,10 @@ async function _runPoll() {
     );
 
     const status = {
-      status:     'error',
-      sheetTitle: _sheetTitle,
-      message:    err.message,
+      status:      'error',
+      sheetTitle:  source.name,
+      activeIndex: sources.getActiveIndex(),
+      message:     err.message,
     };
 
     _setStatus(status);
@@ -116,24 +115,19 @@ async function _runPoll() {
 // ── public API ─────────────────────────────────────────────────────────────────
 
 /**
- * Start the polling loop.  Call once after the HTTP server is listening.
- * Safe to call even when Sheets is not configured (does nothing).
- *
- * @param {import('socket.io').Server} io
+ * Start the polling loop. Call once after the HTTP server begins listening.
  */
 function start(io) {
   _io = io;
-  if (!sheets.isConfigured()) return;
+  if (!sources.isConfigured()) return;
 
-  // Restore from disk cache so contacts are available immediately —
-  // before the first network poll finishes (or if the sheet is unreachable).
+  // Restore from disk cache so contacts are available before the first poll.
   const cached = cache.load();
   if (cached) {
     setContacts(cached.contacts, cached.groups);
-    _sheetTitle = cached.sheetTitle || null;
     _setStatus({
       status:     'ok',
-      sheetTitle: _sheetTitle,
+      sheetTitle: cached.sheetTitle,
       syncedAt:   cached.syncedAt,
       total:      cached.contacts.length,
       skipped:    0,
@@ -142,34 +136,38 @@ function start(io) {
   }
 
   console.log(`[sync] Starting — polling every ${BASE_INTERVAL_MS / 1000}s`);
-  _runPoll(); // immediate first poll to get the latest data
+  _runPoll();
 }
 
-/**
- * Stop the polling loop (used in tests / graceful shutdown).
- */
+/** Stop the polling loop (tests / graceful shutdown). */
 function stop() {
   if (_timer) clearTimeout(_timer);
   _timer = null;
 }
 
 /**
- * Force an immediate sync, cancelling the current scheduled tick.
- * Called by the manual "Sync now" button route.
- * Fire-and-forget — result arrives via socket events.
+ * Force an immediate sync on the current active source.
+ * Called by the manual "Sync now" button and by switchSource().
  */
 function triggerNow() {
   if (_timer) clearTimeout(_timer);
+  _failureCount = 0; // reset backoff for manual triggers
   _runPoll();
 }
 
 /**
- * Return the last known sync status.
- * Server emits this to newly connecting browsers so they see the right state
- * immediately without waiting for the next poll tick.
+ * Switch the active source and immediately poll the new one.
+ * @param {number} index  Index into the sources list.
  */
+function switchSource(index) {
+  sources.activate(index);
+  _failureCount = 0;
+  triggerNow();
+}
+
+/** Current sync status — sent to newly connecting browsers. */
 function getStatus() {
   return { ..._lastStatus };
 }
 
-module.exports = { start, stop, triggerNow, getStatus };
+module.exports = { start, stop, triggerNow, switchSource, getStatus };

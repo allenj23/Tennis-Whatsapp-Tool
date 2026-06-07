@@ -433,8 +433,8 @@ input[type="file"] {
   background: #c0392b;
 }
 
-/* Google Sheets panel */
-.sheets-header {
+/* Google Sheets / Sources panel */
+.sources-panel-header {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -445,6 +445,109 @@ input[type="file"] {
 .sheets-icon {
   font-size: 18px;
   line-height: 1;
+}
+
+/* Source rows */
+.source-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  background: #fafafa;
+  gap: 8px;
+}
+
+.source-row--active {
+  border-color: #27ae60;
+  background: #f0faf4;
+}
+
+.source-row-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.source-dot {
+  color: #27ae60;
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.source-name {
+  font-weight: 500;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.source-tab {
+  font-size: 12px;
+  color: #666;
+  white-space: nowrap;
+}
+
+.source-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.source-active-label {
+  font-size: 12px;
+  color: #27ae60;
+  font-weight: 500;
+  padding: 0 4px;
+}
+
+/* Inline tab selector (appears inside a source row) */
+.source-tab-select {
+  padding: 3px 6px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 12px;
+  background: #fff;
+  cursor: pointer;
+  max-width: 160px;
+}
+
+/* Extra-small button variant */
+.btn--xs {
+  padding: 3px 8px;
+  font-size: 12px;
+  border-radius: 4px;
+}
+
+/* Add-source form */
+.add-source-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border: 1px dashed #aaa;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.add-source-form input[type="text"] {
+  padding: 6px 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 13px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.add-source-actions {
+  display: flex;
+  gap: 6px;
 }
 
 .divider {

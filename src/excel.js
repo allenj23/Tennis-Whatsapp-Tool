@@ -24,14 +24,19 @@ function getField(row, candidates) {
  *
  * This is the shared normalization path used by both:
  *   - parseBuffer()       (Excel upload)
- *   - sheets.fetchRows()  (Google Sheets sync, Phase 1.2)
+ *   - sheets.fetchRows()  (Google Sheets sync)
  *
  * @param {object[]} rows  Each row must have Name/Phone/Group keys (case-insensitive).
+ * @param {{ dedupe?: boolean }} [opts]
+ *   dedupe — when true, skip contacts whose chatId was already added (first occurrence wins).
+ *            Used when merging rows from multiple tabs so the same person isn't listed twice.
+ *            Default: false (preserves existing single-tab / Excel behaviour).
  * @returns {{ contacts: object[], groups: string[], skipped: object[] }}
  */
-function buildContacts(rows) {
-  const contacts = [];
-  const skipped  = [];
+function buildContacts(rows, { dedupe = false } = {}) {
+  const contacts  = [];
+  const skipped   = [];
+  const seenIds   = new Set(); // only used when dedupe=true
 
   rows.forEach((row, idx) => {
     const name     = getField(row, ['name']);
@@ -49,7 +54,12 @@ function buildContacts(rows) {
       return;
     }
 
-    contacts.push({ name, phone, chatId: toChatId(phone), group });
+    const chatId = toChatId(phone);
+
+    if (dedupe && seenIds.has(chatId)) return; // duplicate across tabs — skip
+    seenIds.add(chatId);
+
+    contacts.push({ name, phone, chatId, group });
   });
 
   const groups = [...new Set(contacts.map((c) => c.group))].sort();

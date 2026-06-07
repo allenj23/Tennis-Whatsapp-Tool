@@ -43,6 +43,43 @@ describe('buildContacts — shared normalization pipeline', () => {
   });
 });
 
+// ── buildContacts dedupe option (used when merging multiple tabs) ──────────────
+describe('buildContacts — dedupe option (multi-tab merge)', () => {
+  const kidsRows = [
+    { Name: 'Alice', Phone: '0501111111', Group: 'Kids' },
+    { Name: 'Bob',   Phone: '0502222222', Group: 'Kids' },
+  ];
+  const adultsRows = [
+    { Name: 'Alice', Phone: '0501111111', Group: 'Adults' }, // duplicate phone
+    { Name: 'Carol', Phone: '0503333333', Group: 'Adults' },
+  ];
+  const merged = [...kidsRows, ...adultsRows];
+
+  test('without dedupe: duplicate chatIds are kept (default behaviour)', () => {
+    const { contacts } = buildContacts(merged);
+    assert.equal(contacts.length, 4); // Alice appears twice
+    assert.equal(contacts.filter((c) => c.phone === '972501111111').length, 2);
+  });
+
+  test('with dedupe:true: duplicate chatIds are collapsed — first occurrence wins', () => {
+    const { contacts } = buildContacts(merged, { dedupe: true });
+    assert.equal(contacts.length, 3); // Alice, Bob, Carol
+    const alice = contacts.find((c) => c.name === 'Alice');
+    assert.equal(alice.group, 'Kids'); // first tab wins
+  });
+
+  test('with dedupe:true: groups reflect only the kept contacts', () => {
+    const { groups } = buildContacts(merged, { dedupe: true });
+    // Alice kept as Kids, Bob as Kids, Carol as Adults
+    assert.deepEqual(groups, ['Adults', 'Kids']);
+  });
+
+  test('dedupe:true on rows with no duplicates behaves identically to default', () => {
+    const { contacts } = buildContacts(kidsRows, { dedupe: true });
+    assert.equal(contacts.length, 2);
+  });
+});
+
 describe('excel.parseBuffer — happy path (expected PASS)', () => {
   test('parses valid rows into contacts with chatIds', () => {
     const buf = makeContactsXlsx([

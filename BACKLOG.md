@@ -1,60 +1,55 @@
 # Backlog
 
-Items listed here are planned for future phases. Nothing in this file is implemented in Phase 1.
+Items listed here are planned for future phases.
+
+---
+
+## ✅ Completed
+
+### Live Google Sheets Synchronization
+Fully implemented (Phases 1–3). Scheduled polling, disk cache, sync-status UI, manual sync button, selection reconciliation on refresh. See `src/sync.js`, `src/sheets.js`, `src/cache.js`.
 
 ---
 
 ## High Priority
 
-### Live Google Sheets Synchronization
+### Multi-Sheet Source Selector
 
-**Goal:** Google Sheets becomes the system of record for all contacts and groups, replacing manual Excel uploads entirely.
+**Goal:** Staff can manage a list of saved Google Sheets directly in the app and switch between them with one click — no config file editing.
 
-**Current situation:** Office staff must manually export and upload an Excel file each time the contact list changes.
-
-**Desired state:** The application stays continuously synchronized with a Google Sheet maintained by office staff. Changes made in the sheet become available in the application automatically — no exports, no uploads.
+**Use cases:**
+- Switch between the 2026 active members sheet and a 2025 archive sheet for seasonal campaigns.
+- Load a specific tab (e.g. "Kids", "Adults") within one spreadsheet as a separate source.
+- Merge all tabs from a spreadsheet into one contact list for a club-wide announcement (future).
 
 #### Functional requirements
 
-- Connect to a configured Google Sheet (identified by sheet URL or ID).
-- On startup, load the full contact list from the connected sheet into memory.
-- Periodically check whether the sheet has changed.
-- When a change is detected, refresh the in-memory contact list and groups automatically.
-- Display sync status in the UI:
-  - Connected sheet name / URL
-  - Last successful sync time
-  - Current sync status (Connected · Syncing · Error)
+- A **Sources panel** in Step 2 (above the sync status) shows a list of up to ~5 saved sheets.
+- Each source has:  a friendly name, a spreadsheet URL/ID, and an optional tab name.
+- **Activate**: clicking a source switches the polling target and triggers an immediate full sync.
+- **Add**: paste a Google Sheet URL + give it a name → added to the list and activated.
+- **Remove**: each row has a ✕ button. The active source cannot be removed.
+- **Tab picker**: each source row shows the selected tab. A dropdown (lazy-loaded from the Sheets API) lets staff pick any tab in that spreadsheet.
+- Only the active source is polled at any time.
+- Sources list is persisted to `data/settings.json` so it survives restarts.
 
-#### Synchronization requirements
+#### Future: tab merging
+When `tabName = "__all__"`, fetch and merge rows from every tab in the spreadsheet into one contact list. Reserved sentinel — not in scope for initial implementation.
 
-- Polling interval should be configurable (e.g. every 60 seconds by default).
-- If the sheet is unreachable, the application should continue using the last successfully cached data and surface a warning.
-- Staff should never need to take a manual action for routine contact-list updates.
-
-#### User experience
-
-The UI header or a dedicated status bar should show:
-- Sheet name and connection status
-- Time of last successful sync
-- A visual indicator when a sync is in progress or has failed
-
-#### Future investigation required
-
-Before implementation, evaluate and choose between:
-
-1. **Polling-based synchronization** — periodically fetch the sheet on a timer. Simple to implement; slight delay between edit and refresh. No Google Cloud project required if using published sheet CSV export.
-2. **Google Drive change notifications (push webhooks)** — Google Drive API sends a POST to a registered endpoint when the file changes. Near real-time; requires a publicly reachable server URL and Google Cloud credentials.
-3. **Google Sheets API `updatedTime` detection** — poll the Sheets/Drive API for the file's last-modified timestamp; only re-fetch cell data when the timestamp has advanced. Efficient; requires OAuth or API key setup.
-
-The preferred solution should minimize manual actions by office staff and avoid requiring a public server endpoint if the tool remains local-only.
+#### Implementation steps
+1. `src/sources.js` — CRUD for the saved-sources list; persists to `data/settings.json`; migrates from `config.js` defaults on first run.
+2. Refactor `src/sheets.js` — `fetchRows(id, tab)`, `fetchSheetTitle(id)`, `fetchSheetTabs(id)` accept IDs as parameters.
+3. Update `src/sync.js` — reads active source from `sources.getActive()`; adds `switchSource(index)`.
+4. New server routes: `GET/POST /api/sources`, `DELETE /api/sources/:i`, `POST /api/sources/:i/activate`, `PATCH /api/sources/:i`, `GET /api/sources/:i/tabs`.
+5. Sources panel UI.
+6. Tab dropdown per source row (lazy-loaded).
 
 ---
 
 ### Message Templates
 
-Pre-defined message templates for common club communications so staff can select a template and fill in variables rather than composing from scratch each time.
+Pre-defined message templates for common club communications.
 
-Template ideas:
 - **Welcome message** — sent to new members joining the club.
 - **Competition reminder** — upcoming match or tournament details.
 - **Training cancellation** — notify players that a session is cancelled.
@@ -64,25 +59,23 @@ Template ideas:
 
 ## Medium Priority
 
-### Persist Uploaded Excel File
+### Default Country Code Setting
 
-- Save the uploaded Excel file to local disk on the server.
-- Automatically reload the most recently saved Excel file when the application starts, so staff do not need to re-upload after a restart.
-
-### UI-Configurable Google Sheet (Version A)
-
-Currently the Sheet ID is set in `src/config.js` (code). Allow office staff to paste a Google Sheet URL directly into the app settings screen without editing any code.
-
-- A settings panel (accessible from the header or Step 2) where the user can paste the full Sheet URL.
-- The app extracts the ID from the URL, validates it, and persists the setting to a local file so it survives restarts.
-- The service-account credentials file path should also be configurable from the same settings panel.
-- One-time requirement: share the new sheet with the service-account email (shown on the settings screen).
-- No full OAuth / "Sign in with Google" required — service account auth stays unchanged under the hood.
+- System default: **Israel (+972)**.
+- Allow changing via a settings screen without editing code.
 
 ---
 
-### Default Country Code Setting
+## Low Priority / Future
 
-- The application must use a default country code when a phone number in the Excel file has no country prefix.
-- System default: **Israel (+972)**.
-- Allow the default country code to be changed via a configuration file or settings screen without modifying code.
+### Merged View: Tab Name as Group
+
+When using "All tabs (merged)", optionally treat each tab's name as the contact's Group instead of using the Group column. This allows selecting "Kids" or "Adults" as separate groups in the merged contact list while still being able to message everyone at once.
+
+Currently the first tab's Group column value is used (first-occurrence wins). This backlog item would add a toggle in the sources panel: "Use tab names as groups".
+
+---
+
+### Persist Uploaded Excel File
+
+Save the uploaded Excel file to disk and auto-reload on restart (mostly superseded by Google Sheets sync cache, but useful as a pure-Excel fallback).
