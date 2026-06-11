@@ -76,9 +76,16 @@ const stepCompose      = document.getElementById('step-compose');
 const messageText      = document.getElementById('message-text');
 const mediaFile        = document.getElementById('media-file');
 const mediaPreview     = document.getElementById('media-preview');
-const btnSend          = document.getElementById('btn-send');
-const btnSendCount     = document.getElementById('btn-send-count');
-const composeCount     = document.getElementById('compose-recipient-count');
+const btnSend              = document.getElementById('btn-send');
+const btnSendCount         = document.getElementById('btn-send-count');
+const composeCount         = document.getElementById('compose-recipient-count');
+const templateUrgent       = document.getElementById('template-urgent');
+const templateChips        = document.getElementById('template-chips');
+const templateManage       = document.getElementById('template-manage');
+const templateManageList   = document.getElementById('template-manage-list');
+const btnTemplateManage    = document.getElementById('btn-template-manage');
+const btnTemplateSave      = document.getElementById('btn-template-save');
+const templateError        = document.getElementById('template-error');
 
 const stepStatus           = document.getElementById('step-status');
 const sendOverallProgress  = document.getElementById('send-overall-progress');
@@ -99,6 +106,8 @@ let _googleSpreadsheets = [];
 let _googleConnected    = false;
 let _sheetConfigured    = false;
 let _activeSheetLabel   = '';
+let _templates          = [];
+let _selectedTemplateId = '';
 
 // ── Generic helpers ───────────────────────────────────────────────────────────
 function showWaState(state) {
@@ -1102,8 +1111,161 @@ btnClearAll.addEventListener('click', () => {
 btnToCompose.addEventListener('click', () => {
   unlockStep(stepCompose);
   updateComposeHeader();
+  loadTemplates();
   stepCompose.scrollIntoView({ behavior: 'smooth' });
 });
+
+// ── Message templates ─────────────────────────────────────────────────────────
+
+function isBuiltinTemplate(t) {
+  return String(t.id || '').startsWith('scenario-');
+}
+
+function showTemplateError(msg) {
+  if (!msg) {
+    templateError.classList.add('hidden');
+    templateError.textContent = '';
+    return;
+  }
+  templateError.textContent = msg;
+  templateError.classList.remove('hidden');
+}
+
+function applyTemplate(t) {
+  messageText.value = t.body;
+  _selectedTemplateId = t.id;
+  renderTemplates();
+  validateSendButton();
+  messageText.focus();
+  btnSend.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function _makeChip(t) {
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'template-chip'
+    + (t.urgent ? ' template-chip--urgent' : '')
+    + (t.id === _selectedTemplateId ? ' template-chip--selected' : '');
+  btn.dataset.id = t.id;
+
+  const icon = document.createElement('span');
+  icon.className = 'template-chip-icon';
+  icon.textContent = t.icon || '💬';
+  icon.setAttribute('aria-hidden', 'true');
+
+  const label = document.createElement('span');
+  label.textContent = t.name;
+
+  btn.appendChild(icon);
+  btn.appendChild(label);
+  btn.title = t.name;
+  btn.addEventListener('click', () => applyTemplate(t));
+  return btn;
+}
+
+function _renderChipGroup(container, labelText, items) {
+  container.innerHTML = '';
+  if (items.length === 0) return;
+
+  const lbl = document.createElement('div');
+  lbl.className = 'template-group-label';
+  lbl.textContent = labelText;
+  container.appendChild(lbl);
+
+  items.forEach((t) => container.appendChild(_makeChip(t)));
+}
+
+function renderTemplateManageList() {
+  templateManageList.innerHTML = '';
+  const custom = _templates.filter((t) => !isBuiltinTemplate(t));
+  if (custom.length === 0) return;
+
+  custom.forEach((t) => {
+    const row = document.createElement('div');
+    row.className = 'template-manage-row';
+    const label = (t.icon ? `${t.icon} ` : '') + t.name;
+    row.innerHTML = `<span>${esc(label)}</span>`;
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'row-action';
+    del.textContent = 'הסר';
+    del.addEventListener('click', () => deleteTemplate(t.id));
+    row.appendChild(del);
+    templateManageList.appendChild(row);
+  });
+}
+
+function renderTemplates() {
+  const urgent = _templates.filter((t) => t.urgent);
+  const regular = _templates.filter((t) => !t.urgent);
+
+  _renderChipGroup(templateUrgent, 'דחוף — שליחה מהירה', urgent);
+  _renderChipGroup(templateChips, 'שגרתי', regular);
+
+  templateUrgent.classList.toggle('hidden', urgent.length === 0);
+  renderTemplateManageList();
+}
+
+async function loadTemplates() {
+  try {
+    const data = await fetch('/api/templates').then((r) => r.json());
+    _templates = data.templates || [];
+    renderTemplates();
+  } catch {
+    templateChips.innerHTML = '<span class="status-text">לא ניתן לטעון הודעות מוכנות.</span>';
+  }
+}
+
+async function saveTemplate() {
+  const body = messageText.value.trim();
+  if (!body) {
+    showTemplateError('כתבו הודעה קודם, ואז שמרו.');
+    return;
+  }
+  const firstLine = body.split('\n')[0].replace(/^[\p{Emoji}\s]+/u, '').trim();
+  const name = firstLine.slice(0, 40) || 'הודעה שמורה';
+  btnTemplateSave.disabled = true;
+  showTemplateError('');
+  try {
+    const res  = await fetch('/api/templates', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ name, body, icon: '💬' }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Save failed');
+    _templates = data.templates || [];
+    renderTemplates();
+  } catch (err) {
+    showTemplateError(err.message);
+  } finally {
+    btnTemplateSave.disabled = false;
+  }
+}
+
+async function deleteTemplate(id) {
+  if (!confirm('להסיר הודעה שמורה?')) return;
+  showTemplateError('');
+  try {
+    const res  = await fetch(`/api/templates/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Delete failed');
+    _templates = data.templates || [];
+    if (_selectedTemplateId === id) _selectedTemplateId = '';
+    renderTemplates();
+  } catch (err) {
+    showTemplateError(err.message);
+  }
+}
+
+btnTemplateManage.addEventListener('click', () => {
+  const hidden = templateManage.classList.toggle('hidden');
+  btnTemplateManage.textContent = hidden ? 'ניהול' : 'סגור';
+});
+
+btnTemplateSave.addEventListener('click', saveTemplate);
+
+loadTemplates();
 
 // ── Compose ───────────────────────────────────────────────────────────────────
 

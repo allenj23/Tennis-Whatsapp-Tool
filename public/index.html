@@ -171,9 +171,22 @@
     <section id="step-compose" class="step hidden">
       <h2>Step 4 — Compose Message</h2>
       <p id="compose-recipient-count" class="status-text"></p>
+      <div class="template-panel">
+        <div class="template-panel-header">
+          <label class="template-panel-title">בחר הודעה מוכנה — לחיצה אחת ושליחה</label>
+          <button id="btn-template-manage" class="row-action" type="button">ניהול</button>
+        </div>
+        <div id="template-urgent" class="template-group"></div>
+        <div id="template-chips" class="template-group"></div>
+        <div id="template-manage" class="template-manage hidden">
+          <button id="btn-template-save" class="row-action" type="button">שמור הודעה נוכחית</button>
+          <div id="template-manage-list"></div>
+          <p id="template-error" class="error-text hidden"></p>
+        </div>
+      </div>
       <div class="field">
-        <label for="message-text">Message</label>
-        <textarea id="message-text" rows="5" placeholder="Type your message here..."></textarea>
+        <label for="message-text">עריכה לפני שליחה (אופציונלי)</label>
+        <textarea id="message-text" rows="5" placeholder="לחצו על הודעה למעלה, או הקלידו כאן…"></textarea>
       </div>
       <div class="field">
         <label for="media-file">Attach image or PDF (optional)</label>

@@ -8,8 +8,9 @@ const { PORT } = require('./config');
 const whatsapp = require('./whatsapp');
 const excel    = require('./excel');
 const sheets   = require('./sheets');
-const sources  = require('./sources');
-const sync     = require('./sync');
+const sources    = require('./sources');
+const sync       = require('./sync');
+const templates  = require('./templates');
 const { sendCampaign } = require('./sender');
 
 const app    = express();
@@ -142,6 +143,29 @@ app.post('/api/whatsapp/disconnect', async (_req, res) => {
   } catch (err) {
     console.error('WhatsApp disconnect error:', err.message);
     res.status(500).json({ error: err.message || 'Failed to disconnect WhatsApp.' });
+  }
+});
+
+// ── Message templates ─────────────────────────────────────────────────────────
+app.get('/api/templates', (_req, res) => {
+  res.json({ templates: templates.getAll() });
+});
+
+app.post('/api/templates', (req, res) => {
+  try {
+    const entry = templates.add(req.body || {});
+    res.json({ ok: true, template: entry, templates: templates.getAll() });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.delete('/api/templates/:id', (req, res) => {
+  try {
+    const list = templates.remove(req.params.id);
+    res.json({ ok: true, templates: list });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 

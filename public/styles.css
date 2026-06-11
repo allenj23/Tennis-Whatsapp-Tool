@@ -227,6 +227,134 @@ main {
   margin-top: 8px;
 }
 
+/* Message templates */
+.template-panel {
+  margin-bottom: 16px;
+  padding: 14px;
+  background: #f8f9fa;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+}
+
+.template-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.template-panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+}
+
+.template-manage {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #e8e8e8;
+}
+
+.template-manage-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 13px;
+  color: #555;
+}
+
+.template-manage-row span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.template-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.template-group:last-child {
+  margin-bottom: 0;
+}
+
+.template-group-label {
+  width: 100%;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #888;
+  margin-bottom: 2px;
+}
+
+#template-urgent .template-group-label {
+  color: #c0392b;
+}
+
+.template-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border: 1px solid #d0d7de;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1a1a1a;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
+  text-align: right;
+  line-height: 1.3;
+}
+
+.template-chip:hover {
+  background: #f0f6ff;
+  border-color: #4285f4;
+}
+
+.template-chip--selected {
+  background: #e8f0fe;
+  border-color: #4285f4;
+  box-shadow: 0 0 0 2px rgba(66, 133, 244, 0.25);
+}
+
+.template-chip--urgent {
+  border-color: #f5c6cb;
+  background: #fff8f8;
+}
+
+.template-chip--urgent:hover {
+  background: #fdecea;
+  border-color: #e74c3c;
+}
+
+.template-chip--urgent.template-chip--selected {
+  background: #fdecea;
+  border-color: #e74c3c;
+  box-shadow: 0 0 0 2px rgba(231, 76, 60, 0.2);
+}
+
+.template-chip-icon {
+  font-size: 20px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.template-chip:focus-visible {
+  outline: 2px solid #4285f4;
+  outline-offset: 2px;
+}
+
 /* Form fields */
 .field {
   display: flex;
