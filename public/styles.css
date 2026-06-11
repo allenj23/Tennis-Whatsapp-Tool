@@ -12,36 +12,142 @@ body {
   min-height: 100vh;
 }
 
-header {
+/* ── Application header (all operational controls) ── */
+.app-header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 16px 24px;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 24px;
   background: #ffffff;
   border-bottom: 1px solid #e0e0e0;
 }
 
-.header-badges {
+.app-header__brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.app-header__ops {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.header-chip {
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-shrink: 0;
+  padding: 4px 10px;
+  background: #f8f9fa;
+  border: 1px solid #e8e8e8;
+  border-radius: 999px;
+  font-size: 13px;
+  min-height: 32px;
 }
 
-/* Account chip + subtle sign-out (header) */
+.header-chip--sep {
+  margin-inline-start: 4px;
+}
+
+.header-chip--link {
+  text-decoration: none;
+  color: #1a73e8;
+  font-weight: 500;
+  border-color: #d2e3fc;
+  background: #f8fbff;
+}
+
+.header-chip--link:hover {
+  background: #e8f0fe;
+}
+
+.header-chip__label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #888;
+}
+
+.header-chip__value {
+  font-weight: 600;
+  color: #333;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.header-chip__meta {
+  font-size: 12px;
+  color: #666;
+  white-space: nowrap;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.header-chip__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.header-select {
+  padding: 3px 8px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-size: 13px;
+  background: #fff;
+  max-width: 160px;
+}
+
+.header-select--wide {
+  max-width: 220px;
+}
+
 .header-account {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 4px 4px 4px 10px;
-  background: #f8f9fa;
-  border: 1px solid #e8e8e8;
-  border-radius: 999px;
 }
 
-.header-account.hidden {
+.header-account.hidden,
+.header-chip.hidden {
   display: none;
+}
+
+.header-setup-strip {
+  padding: 12px 24px;
+  background: #fafafa;
+  border-bottom: 1px solid #e8e8e8;
+  text-align: center;
+}
+
+.header-setup-strip.hidden {
+  display: none;
+}
+
+.header-setup-strip--error {
+  background: #fff5f5;
+  color: #c62828;
+  font-size: 14px;
+  margin: 0;
+}
+
+.header-setup-strip__hint {
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 8px;
+}
+
+#qr-container img {
+  display: block;
+  margin: 0 auto;
 }
 
 .reconnect-banner {
@@ -59,18 +165,244 @@ header {
   display: none;
 }
 
-header h1 {
+.app-header h1 {
   font-size: 18px;
   font-weight: 600;
 }
 
 main {
-  max-width: 720px;
-  margin: 32px auto;
-  padding: 0 16px;
+  max-width: 1280px;
+  margin: 12px auto 24px;
+  padding: 0 20px;
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 16px;
+}
+
+.campaign-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: calc(100vh - 140px);
+}
+
+#legacy-setup.hidden {
+  display: none;
+}
+
+.campaign-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.78fr) minmax(0, 1.22fr);
+  gap: 16px;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+}
+
+.campaign-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 220px);
+  max-height: calc(100vh - 220px);
+  padding: 16px;
+  margin: 0;
+}
+
+.campaign-panel-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.campaign-panel-header h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.groups-list-scroll {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  margin: 0 -4px;
+  padding: 0 4px;
+}
+
+.compose-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.compose-workspace {
+  display: grid;
+  grid-template-columns: 1fr minmax(160px, 188px);
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  direction: rtl;
+}
+
+.compose-message-primary {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.compose-message-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #555;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.compose-message-input {
+  flex: 1;
+  width: 100%;
+  min-height: 240px;
+  padding: 14px 16px;
+  font-size: 15px;
+  line-height: 1.55;
+  font-family: inherit;
+  border: 2px solid #c8d0d8;
+  border-radius: 8px;
+  background: #fff;
+  resize: vertical;
+  color: #1a1a1a;
+}
+
+.compose-message-input:focus {
+  border-color: #4285f4;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.12);
+}
+
+.compose-message-input::placeholder {
+  color: #999;
+}
+
+.compose-media-preview {
+  margin-top: 8px;
+}
+
+.compose-footer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #ebebeb;
+  flex-shrink: 0;
+}
+
+.compose-attach-label {
+  font-size: 13px;
+  color: #555;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.compose-footer input[type="file"] {
+  font-size: 12px;
+  max-width: 140px;
+}
+
+.btn--send {
+  margin-inline-start: auto;
+  padding: 11px 20px;
+  font-size: 15px;
+  font-weight: 600;
+  min-width: 160px;
+}
+
+/* Template shortcuts — compact sidebar */
+.compose-templates-side {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 8px;
+  background: #f6f7f8;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+  overflow-y: auto;
+}
+
+.compose-templates-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-shrink: 0;
+}
+
+.compose-templates-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #888;
+}
+
+.compose-templates-side .template-group {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 3px;
+  margin-bottom: 8px;
+}
+
+.compose-templates-side .template-group-label {
+  font-size: 9px;
+  margin-bottom: 2px;
+  padding-bottom: 2px;
+}
+
+.compose-templates-side .template-chip {
+  width: 100%;
+  justify-content: flex-start;
+  padding: 5px 7px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 5px;
+  gap: 5px;
+  border-color: #e0e0e0;
+  background: #fff;
+}
+
+.compose-templates-side .template-chip-icon {
+  font-size: 13px;
+}
+
+.compose-templates-side .template-chip span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: start;
+}
+
+.compose-templates-side .template-chip--urgent {
+  background: #fff;
+}
+
+.compose-templates-side .template-manage {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #e0e0e0;
+}
+
+.compose-templates-side .template-manage-row {
+  font-size: 11px;
+}
+
+.campaign-status {
+  padding: 16px;
 }
 
 .step {
@@ -78,6 +410,49 @@ main {
   border: 1px solid #e0e0e0;
   border-radius: 8px;
   padding: 24px;
+}
+
+@media (max-width: 900px) {
+  .campaign-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .campaign-panel {
+    min-height: auto;
+    max-height: none;
+  }
+
+  .groups-list-scroll {
+    max-height: 40vh;
+  }
+
+  .compose-workspace {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .compose-templates-side {
+    order: -1;
+    max-height: 120px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-content: flex-start;
+  }
+
+  .compose-templates-side .template-group {
+    flex-direction: row;
+    flex-wrap: wrap;
+    flex: 1;
+  }
+
+  .compose-templates-side .template-chip {
+    width: auto;
+    max-width: 160px;
+  }
+
+  .compose-message-input {
+    min-height: 160px;
+  }
 }
 
 .step h2 {
@@ -447,8 +822,8 @@ input[type="file"] {
 .recipients-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
+  justify-content: flex-end;
+  margin-bottom: 10px;
   flex-wrap: wrap;
   gap: 8px;
 }

@@ -7,15 +7,50 @@
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header>
-    <h1>WhatsApp Campaign Tool</h1>
-    <div class="header-badges">
-      <div id="google-header-account" class="header-account hidden">
+  <header class="app-header">
+    <div class="app-header__brand">
+      <h1>WhatsApp Campaign Tool</h1>
+      <span id="server-status" class="badge badge--offline">Connecting...</span>
+    </div>
+
+    <nav class="app-header__ops" aria-label="Operational controls">
+      <!-- WhatsApp -->
+      <div class="header-chip" id="header-wa-chip">
+        <span class="header-chip__label">WhatsApp</span>
+        <span id="header-wa-badge" class="badge badge--offline">Offline</span>
+        <span id="wa-connected-name" class="header-chip__value hidden"></span>
+        <button id="btn-wa-disconnect" class="row-action hidden" type="button">Sign out</button>
+      </div>
+
+      <!-- Google account (unchanged pattern) -->
+      <div id="google-header-account" class="header-chip header-chip--sep header-account hidden">
         <span id="google-header-badge" class="badge badge--online"></span>
         <button type="button" id="btn-google-disconnect" class="row-action">Sign out</button>
       </div>
-      <span id="server-status" class="badge badge--offline">Connecting...</span>
-    </div>
+      <a id="btn-google-signin" class="header-chip header-chip--sep header-chip--link hidden" href="/api/google/auth/login">Sign in with Google</a>
+
+      <!-- Spreadsheet + tab -->
+      <div id="header-sheet-chip" class="header-chip header-chip--sep hidden">
+        <div id="header-sheet-connected" class="header-chip__row hidden">
+          <span id="google-sheet-summary" class="header-chip__value"></span>
+          <select id="google-connected-tab-select" class="header-select" title="Worksheet tab"></select>
+          <button id="btn-change-sheet" class="row-action" type="button">Change sheet</button>
+        </div>
+        <div id="header-sheet-setup" class="header-chip__row hidden">
+          <select id="google-sheet-select" class="header-select header-select--wide">
+            <option value="">Spreadsheet…</option>
+          </select>
+          <button id="btn-google-connect" class="btn btn--secondary btn--sm" type="button" disabled>Connect</button>
+        </div>
+      </div>
+
+      <!-- Sync -->
+      <div id="header-sync-chip" class="header-chip header-chip--sep hidden">
+        <span id="sync-badge" class="badge badge--offline">Not synced</span>
+        <span id="sync-last-time" class="header-chip__meta"></span>
+        <button id="btn-sync" class="btn btn--secondary btn--sm" type="button" title="Sync now">↻</button>
+      </div>
+    </nav>
   </header>
 
   <div id="google-reconnect-banner" class="reconnect-banner hidden" role="alert">
@@ -23,194 +58,124 @@
     <a class="btn btn--google btn--sm" href="/api/google/auth/login">Reconnect Google</a>
   </div>
 
+  <!-- WhatsApp QR / errors (below header, not in campaign area) -->
+  <div id="header-wa-setup" class="header-setup-strip hidden">
+    <div id="wa-state-waiting">
+      <p class="header-setup-strip__hint">Scan with WhatsApp → Linked Devices</p>
+      <div id="qr-container"><p class="placeholder">Waiting for QR code…</p></div>
+      <p id="wa-status" class="status-text">Initializing…</p>
+    </div>
+    <div id="wa-state-loading" class="hidden">
+      <p class="status-text">Authenticated — loading session…</p>
+    </div>
+    <div id="wa-state-error" class="hidden">
+      <p id="wa-error-msg" class="error-text"></p>
+      <button class="btn btn--secondary btn--sm" type="button" onclick="location.reload()">Reload</button>
+    </div>
+  </div>
+
+  <p id="google-error" class="header-setup-strip header-setup-strip--error hidden" role="alert"></p>
+
+  <!-- Legacy / dev-only (hidden) -->
+  <div id="legacy-setup" class="hidden" aria-hidden="true">
+    <div id="sources-panel">
+      <span id="sync-badge-setup" class="badge badge--offline"></span>
+      <p id="sync-last-time-setup"></p>
+      <div id="sources-list"></div>
+      <div id="legacy-source-actions">
+        <div id="add-source-form" class="add-source-form hidden">
+          <input type="text" id="add-source-url" autocomplete="off" />
+          <input type="text" id="add-source-name" autocomplete="off" />
+          <button id="btn-confirm-add" type="button"></button>
+          <button id="btn-cancel-add" type="button"></button>
+          <p id="add-source-error" class="error-text hidden"></p>
+        </div>
+        <button id="btn-show-add" type="button"></button>
+        <button id="btn-sync-legacy" type="button"></button>
+      </div>
+      <div id="sync-summary"></div>
+    </div>
+    <div id="excel-fallback">
+      <input type="file" id="excel-file" accept=".xlsx,.xls" />
+      <div id="upload-summary"></div>
+    </div>
+    <p id="google-auth-status"></p>
+    <div id="wizard-track">
+      <div id="wiz-step-google"></div>
+      <div id="wiz-step-sheet"></div>
+    </div>
+    <div id="google-signin-block"></div>
+    <div id="google-sheet-picker"></div>
+    <div id="google-panel"></div>
+    <div id="oauth-sync-actions"></div>
+  </div>
+
   <main>
-    <!-- Step 1: Connect to WhatsApp -->
-    <section id="step-connect" class="step">
-      <h2>Step 1 — Connect to WhatsApp</h2>
-
-      <!-- Not connected state -->
-      <div id="wa-state-waiting">
-        <p>Scan the QR code with your phone to link WhatsApp.</p>
-        <div id="qr-container">
-          <p class="placeholder">Waiting for QR code...</p>
-        </div>
-        <p id="wa-status" class="status-text">Initializing...</p>
-      </div>
-
-      <!-- Authenticated / loading state -->
-      <div id="wa-state-loading" class="hidden">
-        <p class="status-text">Authenticated — loading session...</p>
-      </div>
-
-      <!-- Ready / connected state -->
-      <div id="wa-state-ready" class="hidden">
-        <div class="connection-row connected-banner">
-          <div class="connection-row__status">
-            <span class="badge badge--online">Connected</span>
-            <span id="wa-connected-name"></span>
+    <div id="campaign-workspace" class="campaign-workspace">
+      <div class="campaign-grid">
+        <section id="step-recipients" class="step campaign-panel hidden">
+          <div class="campaign-panel-header">
+            <h2>Recipients</h2>
+            <span id="selected-count" class="selected-count">0 selected</span>
           </div>
-          <button id="btn-wa-disconnect" class="row-action" type="button">Sign out</button>
-        </div>
-      </div>
-
-      <!-- Disconnected / error state -->
-      <div id="wa-state-error" class="hidden">
-        <p id="wa-error-msg" class="error-text"></p>
-        <button class="btn btn--secondary btn--sm" onclick="location.reload()">Reload page</button>
-      </div>
-    </section>
-
-    <!-- Step 2: Connect contacts (Google Sheets or Excel fallback) -->
-    <section id="step-upload" class="step hidden">
-      <h2 id="step-upload-title">Step 2 — Connect your contacts</h2>
-
-      <!-- OAuth setup wizard (customer path) -->
-      <div id="google-panel" class="hidden">
-        <div class="wizard-track" id="wizard-track">
-          <div class="wizard-step" id="wiz-step-google">
-            <span class="wizard-num">1</span>
-            <span class="wizard-label">Sign in with Google</span>
-          </div>
-          <div class="wizard-step" id="wiz-step-sheet">
-            <span class="wizard-num">2</span>
-            <span class="wizard-label">Choose spreadsheet</span>
-          </div>
-        </div>
-
-        <div id="google-signin-block">
-          <p class="wizard-prompt">Sign in with the Google account that can open your club's contacts spreadsheet.</p>
-          <a id="btn-google-signin" class="btn btn--google" href="/api/google/auth/login">Sign in with Google</a>
-        </div>
-
-        <div id="google-sheet-picker" class="hidden">
-          <p id="google-auth-status" class="status-text"></p>
-          <div class="field">
-            <label for="google-sheet-select">Spreadsheet</label>
-            <select id="google-sheet-select">
-              <option value="">Loading…</option>
-            </select>
-          </div>
-          <button id="btn-google-connect" class="btn btn--primary" type="button" disabled>Connect spreadsheet</button>
-        </div>
-
-        <div id="google-connected-panel" class="hidden">
-          <div class="connection-row connected-banner">
-            <div class="connection-row__status">
-              <span class="badge badge--online">Connected</span>
-              <span id="google-sheet-summary"></span>
+          <div class="recipients-toolbar">
+            <div class="toolbar-actions">
+              <button id="btn-select-all" class="btn btn--secondary btn--sm" type="button">Select all</button>
+              <button id="btn-clear-all" class="btn btn--secondary btn--sm" type="button">Clear</button>
             </div>
-            <button id="btn-change-sheet" class="row-action" type="button">Change spreadsheet</button>
           </div>
-          <div class="field">
-            <label for="google-connected-tab-select">Worksheet tab</label>
-            <select id="google-connected-tab-select">
-              <option value="">Loading…</option>
-            </select>
+          <div id="groups-list" class="groups-list-scroll"></div>
+        </section>
+
+        <section id="step-compose" class="step campaign-panel hidden">
+          <div class="campaign-panel-header">
+            <h2>Message</h2>
+            <span id="compose-recipient-count" class="selected-count"></span>
           </div>
-        </div>
-
-        <p id="google-error" class="error-text hidden"></p>
-      </div>
-
-      <!-- Sync status (OAuth compact view + legacy multi-source view) -->
-      <div id="sources-panel" class="hidden">
-        <div class="sources-panel-header">
-          <span class="sheets-icon">📊</span>
-          <strong id="sources-panel-title">Contact Sources</strong>
-          <span id="sync-badge" class="badge badge--offline">Not synced</span>
-        </div>
-        <p id="sync-last-time" class="status-text"></p>
-        <div id="oauth-sync-actions" class="hidden">
-          <button id="btn-sync" class="btn btn--secondary btn--sm" type="button">↻ Sync now</button>
-        </div>
-        <div id="sources-list"></div>
-        <div id="legacy-source-actions">
-          <div id="add-source-form" class="add-source-form hidden">
-            <input type="text" id="add-source-url"  placeholder="Paste Google Sheet URL…" autocomplete="off" />
-            <input type="text" id="add-source-name" placeholder="Give it a name…" autocomplete="off" />
-            <div class="add-source-actions">
-              <button id="btn-confirm-add" class="btn btn--primary btn--sm">Add</button>
-              <button id="btn-cancel-add"  class="btn btn--secondary btn--sm">Cancel</button>
+          <div class="compose-body">
+            <div class="compose-workspace">
+              <div class="compose-message-primary">
+                <label for="message-text" class="compose-message-label">הודעה</label>
+                <textarea id="message-text" class="compose-message-input" rows="10" placeholder="כתבו את ההודעה כאן, או בחרו קיצור מימין…"></textarea>
+                <div id="media-preview" class="compose-media-preview"></div>
+                <div class="compose-footer">
+                  <label for="media-file" class="compose-attach-label">📎 Flyer</label>
+                  <input type="file" id="media-file" accept="image/*,.pdf" />
+                  <button id="btn-send" class="btn btn--primary btn--send" type="button" disabled>
+                    Send to <span id="btn-send-count">0</span>
+                  </button>
+                </div>
+              </div>
+              <aside class="compose-templates-side" aria-label="Message shortcuts">
+                <div class="compose-templates-header">
+                  <span class="compose-templates-title">קיצורים</span>
+                  <button id="btn-template-manage" class="row-action" type="button">ניהול</button>
+                </div>
+                <div id="template-urgent" class="template-group"></div>
+                <div id="template-chips" class="template-group"></div>
+                <div id="template-manage" class="template-manage hidden">
+                  <button id="btn-template-save" class="row-action" type="button">שמור הודעה נוכחית</button>
+                  <div id="template-manage-list"></div>
+                </div>
+                <p id="template-error" class="error-text hidden"></p>
+              </aside>
             </div>
-            <p id="add-source-error" class="error-text hidden"></p>
           </div>
-          <button id="btn-show-add" class="btn btn--secondary btn--sm">+ Add sheet</button>
-          <button id="btn-sync-legacy" class="btn btn--secondary btn--sm">↻ Sync now</button>
-        </div>
-        <div id="sync-summary"></div>
+        </section>
       </div>
 
-      <!-- Excel fallback — hidden when OAuth is the customer path -->
-      <div id="excel-fallback">
-        <hr class="divider" />
-        <p>Or upload an Excel file with columns: <strong>Name | Phone | Group</strong></p>
-        <label class="file-label">
-          <input type="file" id="excel-file" accept=".xlsx,.xls" />
-        </label>
-        <div id="upload-summary"></div>
-      </div>
-    </section>
-
-    <!-- Step 3: Select Recipients -->
-    <section id="step-recipients" class="step hidden">
-      <h2>Step 3 — Select Recipients</h2>
-      <div class="recipients-toolbar">
-        <span id="selected-count" class="selected-count">0 recipients selected</span>
-        <div class="toolbar-actions">
-          <button id="btn-select-all" class="btn btn--secondary btn--sm">Select all</button>
-          <button id="btn-clear-all" class="btn btn--secondary btn--sm">Clear all</button>
+      <section id="step-status" class="step campaign-status hidden">
+        <div id="send-overall-progress" class="overall-progress hidden">
+          <div id="send-progress-bar" class="progress-bar"><div id="send-progress-fill" class="progress-fill"></div></div>
+          <span id="send-progress-label" class="status-text"></span>
         </div>
-      </div>
-      <div id="groups-list"></div>
-      <div id="step-recipients-footer" class="step-footer hidden">
-        <button id="btn-to-compose" class="btn btn--primary">Next: Compose message</button>
-      </div>
-    </section>
-
-    <!-- Step 4: Compose -->
-    <section id="step-compose" class="step hidden">
-      <h2>Step 4 — Compose Message</h2>
-      <p id="compose-recipient-count" class="status-text"></p>
-      <div class="template-panel">
-        <div class="template-panel-header">
-          <label class="template-panel-title">בחר הודעה מוכנה — לחיצה אחת ושליחה</label>
-          <button id="btn-template-manage" class="row-action" type="button">ניהול</button>
+        <div id="send-progress"></div>
+        <div id="send-summary"></div>
+        <div id="send-retry-footer" class="step-footer hidden">
+          <button id="btn-retry-failed" class="btn btn--danger" type="button">Retry failed recipients</button>
         </div>
-        <div id="template-urgent" class="template-group"></div>
-        <div id="template-chips" class="template-group"></div>
-        <div id="template-manage" class="template-manage hidden">
-          <button id="btn-template-save" class="row-action" type="button">שמור הודעה נוכחית</button>
-          <div id="template-manage-list"></div>
-          <p id="template-error" class="error-text hidden"></p>
-        </div>
-      </div>
-      <div class="field">
-        <label for="message-text">עריכה לפני שליחה (אופציונלי)</label>
-        <textarea id="message-text" rows="5" placeholder="לחצו על הודעה למעלה, או הקלידו כאן…"></textarea>
-      </div>
-      <div class="field">
-        <label for="media-file">Attach image or PDF (optional)</label>
-        <input type="file" id="media-file" accept="image/*,.pdf" />
-      </div>
-      <div id="media-preview"></div>
-      <div class="step-footer">
-        <button id="btn-send" class="btn btn--primary" disabled>Send to <span id="btn-send-count">0</span> recipient(s)</button>
-      </div>
-    </section>
-
-    <!-- Step 5: Send & Status -->
-    <section id="step-status" class="step hidden">
-      <h2>Step 5 — Sending</h2>
-      <div id="send-overall-progress" class="overall-progress hidden">
-        <div id="send-progress-bar" class="progress-bar"><div id="send-progress-fill" class="progress-fill"></div></div>
-        <span id="send-progress-label" class="status-text"></span>
-      </div>
-      <div id="send-progress"></div>
-      <div id="send-summary"></div>
-      <div id="send-retry-footer" class="step-footer hidden">
-        <button id="btn-retry-failed" class="btn btn--danger">Retry failed recipients</button>
-      </div>
-    </section>
+      </section>
+    </div>
   </main>
 
   <script src="/socket.io/socket.io.js"></script>

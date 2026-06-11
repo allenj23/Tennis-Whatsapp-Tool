@@ -16,18 +16,23 @@ function esc(str) {
 const serverStatus     = document.getElementById('server-status');
 const waStateWaiting   = document.getElementById('wa-state-waiting');
 const waStateLoading   = document.getElementById('wa-state-loading');
-const waStateReady     = document.getElementById('wa-state-ready');
 const waStateError     = document.getElementById('wa-state-error');
+const headerWaSetup    = document.getElementById('header-wa-setup');
+const headerWaBadge    = document.getElementById('header-wa-badge');
 const qrContainer      = document.getElementById('qr-container');
 const waStatus         = document.getElementById('wa-status');
 const waConnectedName  = document.getElementById('wa-connected-name');
 const waErrorMsg       = document.getElementById('wa-error-msg');
 
-const stepUpload         = document.getElementById('step-upload');
+const campaignWorkspace  = document.getElementById('campaign-workspace');
+const headerSheetChip       = document.getElementById('header-sheet-chip');
+const headerSheetConnected  = document.getElementById('header-sheet-connected');
+const headerSheetSetup      = document.getElementById('header-sheet-setup');
+const headerSyncChip        = document.getElementById('header-sync-chip');
+const btnGoogleSignin       = document.getElementById('btn-google-signin');
 const googlePanel        = document.getElementById('google-panel');
 const googleSigninBlock  = document.getElementById('google-signin-block');
 const googleSheetPicker       = document.getElementById('google-sheet-picker');
-const googleConnectedPanel    = document.getElementById('google-connected-panel');
 const googleSheetSummary      = document.getElementById('google-sheet-summary');
 const googleAuthStatus        = document.getElementById('google-auth-status');
 const googleSheetSelect       = document.getElementById('google-sheet-select');
@@ -50,6 +55,8 @@ const legacySourceActions = document.getElementById('legacy-source-actions');
 const sourcesPanel       = document.getElementById('sources-panel');
 const syncBadge       = document.getElementById('sync-badge');
 const syncLastTime    = document.getElementById('sync-last-time');
+const syncBadgeSetup  = document.getElementById('sync-badge-setup');
+const syncLastTimeSetup = document.getElementById('sync-last-time-setup');
 const sourcesList     = document.getElementById('sources-list');
 const addSourceForm   = document.getElementById('add-source-form');
 const addSourceUrl    = document.getElementById('add-source-url');
@@ -69,9 +76,6 @@ const groupsList       = document.getElementById('groups-list');
 const selectedCount    = document.getElementById('selected-count');
 const btnSelectAll     = document.getElementById('btn-select-all');
 const btnClearAll      = document.getElementById('btn-clear-all');
-const recipientsFooter = document.getElementById('step-recipients-footer');
-const btnToCompose     = document.getElementById('btn-to-compose');
-
 const stepCompose      = document.getElementById('step-compose');
 const messageText      = document.getElementById('message-text');
 const mediaFile        = document.getElementById('media-file');
@@ -108,17 +112,73 @@ let _sheetConfigured    = false;
 let _activeSheetLabel   = '';
 let _templates          = [];
 let _selectedTemplateId = '';
+let _waReady            = false;
 
 // ── Generic helpers ───────────────────────────────────────────────────────────
 function showWaState(state) {
   waStateWaiting.classList.toggle('hidden', state !== 'waiting');
   waStateLoading.classList.toggle('hidden', state !== 'loading');
-  waStateReady.classList.toggle('hidden',   state !== 'ready');
   waStateError.classList.toggle('hidden',   state !== 'error');
+
+  const stripVisible = state === 'waiting' || state === 'loading' || state === 'error';
+  if (headerWaSetup) headerWaSetup.classList.toggle('hidden', !stripVisible);
+
+  if (!headerWaBadge) return;
+  if (state === 'ready') {
+    headerWaBadge.textContent = 'Online';
+    headerWaBadge.className = 'badge badge--online';
+    waConnectedName.classList.remove('hidden');
+    btnWaDisconnect.classList.remove('hidden');
+  } else if (state === 'loading') {
+    headerWaBadge.textContent = 'Connecting…';
+    headerWaBadge.className = 'badge badge--sending';
+    waConnectedName.classList.add('hidden');
+    btnWaDisconnect.classList.add('hidden');
+  } else if (state === 'error') {
+    headerWaBadge.textContent = 'Error';
+    headerWaBadge.className = 'badge badge--failed';
+    waConnectedName.classList.add('hidden');
+    btnWaDisconnect.classList.add('hidden');
+  } else {
+    headerWaBadge.textContent = 'Offline';
+    headerWaBadge.className = 'badge badge--offline';
+    waConnectedName.classList.add('hidden');
+    btnWaDisconnect.classList.add('hidden');
+  }
 }
 
-function unlockStep(el) { el.classList.remove('hidden'); }
-function lockStep(el)   { el.classList.add('hidden'); }
+function unlockStep(el) { if (el) el.classList.remove('hidden'); }
+function lockStep(el)   { if (el) el.classList.add('hidden'); }
+
+function isCampaignReady() {
+  if (!_waReady || allContacts.length === 0) return false;
+  if (_googleOAuthMode) return _sheetConfigured;
+  return true;
+}
+
+function updateHeaderOps() {
+  if (headerSyncChip) {
+    const showSync = _googleOAuthMode
+      ? (_googleConnected && _sheetConfigured)
+      : !!_sheetConfigured;
+    headerSyncChip.classList.toggle('hidden', !showSync);
+  }
+}
+
+function updateLayoutMode() {
+  updateHeaderOps();
+  campaignWorkspace.classList.remove('hidden');
+
+  if (isCampaignReady()) {
+    unlockStep(stepRecipients);
+    unlockStep(stepCompose);
+    loadTemplates();
+    updateComposeHeader();
+  } else {
+    lockStep(stepRecipients);
+    lockStep(stepCompose);
+  }
+}
 
 // ── Server connection ─────────────────────────────────────────────────────────
 socket.on('connect', () => {
@@ -141,9 +201,8 @@ socket.on('server:ready', ({ sheetsConfigured, googleOAuthMode, googleConnected 
   if (_googleOAuthMode) {
     applyOAuthModeUi();
     refreshGoogleUi();
-  } else if (sheetsConfigured) {
-    sourcesPanel.classList.remove('hidden');
   }
+  updateLayoutMode();
 });
 
 function applyOAuthModeUi() {
@@ -152,9 +211,7 @@ function applyOAuthModeUi() {
   legacySourceActions.classList.add('hidden');
   sourcesList.classList.add('hidden');
   oauthSyncActions.classList.remove('hidden');
-  sourcesPanel.classList.remove('hidden');
-  const title = document.getElementById('sources-panel-title');
-  if (title) title.textContent = 'Sync status';
+  sourcesPanel.classList.add('hidden');
 }
 
 function showGoogleError(msg) {
@@ -208,11 +265,27 @@ function updateWizardSteps(phase) {
 }
 
 function showGooglePhase(phase) {
-  googleSigninBlock.classList.toggle('hidden', phase !== 'google');
-  googleSheetPicker.classList.toggle('hidden', phase !== 'picker');
-  googleConnectedPanel.classList.toggle('hidden', phase !== 'connected');
-  wizardTrack.classList.toggle('hidden', phase === 'connected');
+  if (googleSigninBlock) googleSigninBlock.classList.toggle('hidden', phase !== 'google');
+  if (googleSheetPicker) googleSheetPicker.classList.toggle('hidden', phase !== 'picker');
+  if (wizardTrack) wizardTrack.classList.toggle('hidden', phase === 'connected');
   updateWizardSteps(phase);
+
+  if (_googleOAuthMode) {
+    if (btnGoogleSignin) btnGoogleSignin.classList.toggle('hidden', phase !== 'google');
+    if (googleHeaderAccount) googleHeaderAccount.classList.toggle('hidden', phase === 'google');
+    if (headerSheetChip) {
+      headerSheetChip.classList.toggle('hidden', phase === 'google');
+      if (phase === 'picker') {
+        headerSheetConnected?.classList.add('hidden');
+        headerSheetSetup?.classList.remove('hidden');
+      } else if (phase === 'connected') {
+        headerSheetConnected?.classList.remove('hidden');
+        headerSheetSetup?.classList.add('hidden');
+      }
+    }
+  }
+
+  if (phase === 'connected') updateLayoutMode();
 }
 
 async function refreshGoogleUi() {
@@ -351,10 +424,6 @@ btnGoogleConnect.addEventListener('click', async () => {
 
 btnChangeSheet.addEventListener('click', async () => {
   showGooglePhase('picker');
-  try {
-    const status = await fetch('/api/google/status').then((r) => r.json());
-    googleAuthStatus.textContent = `Signed in as ${status.email || 'Google user'}`;
-  } catch { /* ignore */ }
   await loadGoogleSpreadsheets();
 });
 
@@ -399,11 +468,12 @@ btnGoogleDisconnect.addEventListener('click', async () => {
     updateGoogleHeaderBadge('');
     hideReconnectBanner();
     showGoogleError('');
-    syncBadge.textContent = 'Not synced';
-    syncBadge.className = 'badge badge--offline';
-    syncLastTime.textContent = '';
-    lockStep(stepRecipients);
+    _setSyncBadge(syncBadge, 'Not synced', 'badge badge--offline');
+    _setSyncBadge(syncBadgeSetup, 'Not synced', 'badge badge--offline');
+    if (syncLastTime) syncLastTime.textContent = '';
+    if (syncLastTimeSetup) syncLastTimeSetup.textContent = '';
     showGooglePhase('google');
+    updateLayoutMode();
   } catch {
     showGoogleError('Could not disconnect Google.');
   } finally {
@@ -434,7 +504,7 @@ btnWaDisconnect.addEventListener('click', async () => {
   const err = params.get('google_error');
   if (err) showGoogleError(decodeURIComponent(err));
   if (params.get('google_connected') || params.get('google_error')) {
-    history.replaceState({}, '', location.pathname + (location.hash || '#step-upload'));
+    history.replaceState({}, '', location.pathname);
   }
 })();
 
@@ -451,7 +521,6 @@ socket.on('wa:qr', (dataUrl) => {
   img.height = 220;
   qrContainer.innerHTML = '';
   qrContainer.appendChild(img);
-  lockStep(stepUpload);
 });
 
 socket.on('wa:authenticated', () => {
@@ -460,20 +529,22 @@ socket.on('wa:authenticated', () => {
 });
 
 socket.on('wa:ready', ({ name, phone }) => {
+  _waReady = true;
   showWaState('ready');
-  // textContent is inherently safe — no esc() needed here.
   waConnectedName.textContent = `${name} (+${phone})`;
-  unlockStep(stepUpload);
+  updateLayoutMode();
 });
 
 socket.on('wa:auth_failure', (msg) => {
+  _waReady = false;
   showWaState('error');
   waErrorMsg.textContent = `Authentication failed: ${msg}`;
   qrContainer.innerHTML = '';
-  lockStep(stepUpload);
+  updateLayoutMode();
 });
 
 socket.on('wa:disconnected', (reason) => {
+  _waReady = false;
   if (reason === 'logged_out' || String(reason).toUpperCase() === 'LOGOUT') {
     showWaState('waiting');
     waStatus.textContent = 'Scan the QR code with your phone.';
@@ -483,10 +554,8 @@ socket.on('wa:disconnected', (reason) => {
     waErrorMsg.textContent = `WhatsApp disconnected (${reason}).`;
     qrContainer.innerHTML = '';
   }
-  lockStep(stepUpload);
-  lockStep(stepRecipients);
-  lockStep(stepCompose);
   lockStep(stepStatus);
+  updateLayoutMode();
 });
 
 // ── Contacts loaded (Excel upload response, page reload, or background sync) ──
@@ -495,10 +564,10 @@ socket.on('contacts:loaded', ({ contacts, groups }) => {
   const previousSelection = new Set(selectedChatIds);
 
   applyContacts(contacts, groups);
-  renderGroupsList();         // clears selectedChatIds and re-renders checkboxes
-  unlockStep(stepRecipients);
+  renderGroupsList();
+  updateLayoutMode();
 
-  if (previousSelection.size === 0) return; // nothing to reconcile
+  if (previousSelection.size === 0) return;
 
   // Re-apply any previously selected contacts that still exist in the new list.
   const validIds = new Set(contacts.map((c) => c.chatId));
@@ -534,8 +603,6 @@ excelFile.addEventListener('change', async (e) => {
   if (!file) return;
 
   uploadSummary.innerHTML = '<p class="status-text">Parsing file...</p>';
-  lockStep(stepRecipients);
-  lockStep(stepCompose);
   lockStep(stepStatus);
   selectedChatIds.clear();
 
@@ -557,7 +624,7 @@ excelFile.addEventListener('change', async (e) => {
     renderGroupsList();
 
     if (data.contacts.length > 0) {
-      unlockStep(stepRecipients);
+      updateLayoutMode();
     } else {
       uploadSummary.innerHTML += '<p class="warn-text">No valid contacts found. Check the file format.</p>';
     }
@@ -881,19 +948,30 @@ socket.on('sync:status', ({ status, syncedAt, total, skipped, message, sheetTitl
   if (activeIndex !== undefined && !_googleOAuthMode) highlightActiveSource(activeIndex);
 });
 
+function _setSyncBadge(el, text, className) {
+  if (!el) return;
+  el.textContent = text;
+  el.className = className;
+}
+
 function setSyncStatus(status, message, syncedAt, total, skipped, sheetTitle) {
   if (status === 'syncing') {
-    syncBadge.textContent  = 'Syncing…';
-    syncBadge.className    = 'badge badge--sending';
-    syncLastTime.textContent = '';
+    const cls = 'badge badge--sending';
+    _setSyncBadge(syncBadge, 'Syncing…', cls);
+    _setSyncBadge(syncBadgeSetup, 'Syncing…', cls);
+    if (syncLastTime) syncLastTime.textContent = '';
+    if (syncLastTimeSetup) syncLastTimeSetup.textContent = '';
     return;
   }
   if (status === 'ok') {
-    syncBadge.textContent = 'Synced ✓';
-    syncBadge.className   = 'badge badge--sent';
+    const cls = 'badge badge--sent';
+    _setSyncBadge(syncBadge, 'Synced ✓', cls);
+    _setSyncBadge(syncBadgeSetup, 'Synced ✓', cls);
     const time     = syncedAt ? new Date(syncedAt).toLocaleTimeString() : '';
     const skipNote = (skipped > 0) ? ` · ${skipped} skipped` : '';
-    syncLastTime.textContent = `Last sync: ${time} — ${total} contact(s)${skipNote}`;
+    const timeText = time ? `${time} · ${total} contacts${skipNote}` : '';
+    if (syncLastTime) syncLastTime.textContent = timeText;
+    if (syncLastTimeSetup) syncLastTimeSetup.textContent = timeText;
     hideReconnectBanner();
 
     if (_googleOAuthMode && sheetTitle) {
@@ -901,17 +979,20 @@ function setSyncStatus(status, message, syncedAt, total, skipped, sheetTitle) {
       _activeSheetLabel = sheetTitle;
       googleSheetSummary.textContent = sheetTitle;
       showGooglePhase('connected');
+      updateLayoutMode();
     }
     return;
   }
   if (status === 'error') {
-    syncBadge.textContent    = 'Error';
-    syncBadge.className      = 'badge badge--failed';
-    syncLastTime.textContent = message ? `Error: ${message}` : '';
+    const cls = 'badge badge--failed';
+    _setSyncBadge(syncBadge, 'Error', cls);
+    _setSyncBadge(syncBadgeSetup, 'Error', cls);
+    const errText = message ? message : '';
+    if (syncLastTime) syncLastTime.textContent = errText;
+    if (syncLastTimeSetup) syncLastTimeSetup.textContent = errText;
     if (_googleOAuthMode && isGoogleAuthError(message)) {
       showReconnectBanner(message);
     }
-    return;
   }
 }
 
@@ -935,7 +1016,6 @@ function groupByClient(contacts) {
 function renderGroupsList() {
   selectedChatIds.clear();
   groupsList.innerHTML = '';
-  lockStep(recipientsFooter);
 
   allGroups.forEach((group) => {
     const members  = allContacts.filter((c) => c.group === group);
@@ -1083,8 +1163,8 @@ function syncGroupCheckbox(group) {
 
 function updateSelectionUI() {
   const n = selectedChatIds.size;
-  selectedCount.textContent = `${n} recipient${n !== 1 ? 's' : ''} selected`;
-  n > 0 ? unlockStep(recipientsFooter) : lockStep(recipientsFooter);
+  selectedCount.textContent = n === 1 ? '1 selected' : `${n} selected`;
+  updateComposeHeader();
 }
 
 btnSelectAll.addEventListener('click', () => {
@@ -1106,13 +1186,6 @@ btnClearAll.addEventListener('click', () => {
     cb.indeterminate = false;
   });
   updateSelectionUI();
-});
-
-btnToCompose.addEventListener('click', () => {
-  unlockStep(stepCompose);
-  updateComposeHeader();
-  loadTemplates();
-  stepCompose.scrollIntoView({ behavior: 'smooth' });
 });
 
 // ── Message templates ─────────────────────────────────────────────────────────
@@ -1137,7 +1210,6 @@ function applyTemplate(t) {
   renderTemplates();
   validateSendButton();
   messageText.focus();
-  btnSend.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function _makeChip(t) {
@@ -1199,8 +1271,8 @@ function renderTemplates() {
   const urgent = _templates.filter((t) => t.urgent);
   const regular = _templates.filter((t) => !t.urgent);
 
-  _renderChipGroup(templateUrgent, 'דחוף — שליחה מהירה', urgent);
-  _renderChipGroup(templateChips, 'שגרתי', regular);
+  _renderChipGroup(templateUrgent, 'דחוף', urgent);
+  _renderChipGroup(templateChips, 'עוד', regular);
 
   templateUrgent.classList.toggle('hidden', urgent.length === 0);
   renderTemplateManageList();
@@ -1271,7 +1343,7 @@ loadTemplates();
 
 function updateComposeHeader() {
   const n = selectedChatIds.size;
-  composeCount.textContent = `Sending to ${n} recipient${n !== 1 ? 's' : ''}`;
+  composeCount.textContent = n === 0 ? '' : `${n} recipient${n !== 1 ? 's' : ''}`;
   btnSendCount.textContent = n;
   validateSendButton();
 }
