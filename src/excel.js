@@ -1,5 +1,6 @@
 const XLSX = require('xlsx');
 const { normalizePhone, toChatId } = require('./phone');
+const { parseTrainingDays } = require('./days');
 
 // In-memory store — replaced on each successful upload or sync
 let _contacts = [];
@@ -11,6 +12,7 @@ let _groups = [];
 
 const NAME_HEADERS  = ['name', 'שם הלקוח', 'שם הילד', 'שם'];
 const GROUP_HEADERS = ['group', 'שם קבוצה', 'שם הקבוצה'];
+const DAYS_HEADERS  = ['days', 'ימים', 'day', 'יום'];
 
 /**
  * Phone column definitions.
@@ -55,7 +57,7 @@ function getField(row, candidates) {
   return '';
 }
 
-function makeUnavailableEnrollment({ client, group, clientId, reason }) {
+function makeUnavailableEnrollment({ client, group, clientId, reason, trainingDays }) {
   return {
     name:               client,
     phone:              '',
@@ -65,6 +67,7 @@ function makeUnavailableEnrollment({ client, group, clientId, reason }) {
     clientId,
     enrollmentId:       clientId,
     role:               '',
+    trainingDays:       trainingDays || [],
     unavailable:        true,
     unavailableReason:  reason,
   };
@@ -103,8 +106,8 @@ function buildContacts(rows) {
       return;
     }
 
-    // Stable per-row identifier so all phones from this row share the same clientId
-    const clientId = `r${idx}`;
+    const clientId     = `r${idx}`;
+    const trainingDays = parseTrainingDays(getField(row, DAYS_HEADERS));
 
     // Within-row dedup: avoid adding the same phone number twice from the same row
     // (e.g. mother and father happen to share a number)
@@ -139,17 +142,18 @@ function buildContacts(rows) {
         phone,
         chatId,
         group,
-        client,       // original name without role suffix
-        clientId,     // one enrollment per sheet row
+        client,
+        clientId,
         enrollmentId: clientId,
         role:         col.label,
+        trainingDays,
       });
     }
 
   // Rows with no usable phone still appear as non-selectable enrollments.
     if (!rowHasValidPhone && !contacts.some((c) => c.clientId === clientId)) {
       const reason = !rowHasAnyPhone ? 'Missing phone' : 'Invalid phone number';
-      contacts.push(makeUnavailableEnrollment({ client, group, clientId, reason }));
+      contacts.push(makeUnavailableEnrollment({ client, group, clientId, reason, trainingDays }));
     }
   });
 
@@ -196,4 +200,11 @@ function setContacts(contacts, groups) {
   _groups   = groups;
 }
 
-module.exports = { buildContacts, parseBuffer, getContacts, getGroups, setContacts };
+module.exports = {
+  buildContacts,
+  parseBuffer,
+  getContacts,
+  getGroups,
+  setContacts,
+  parseTrainingDays,
+};

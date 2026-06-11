@@ -76,6 +76,8 @@ const groupsList       = document.getElementById('groups-list');
 const selectedCount    = document.getElementById('selected-count');
 const btnSelectAll     = document.getElementById('btn-select-all');
 const btnClearAll      = document.getElementById('btn-clear-all');
+const dayFilter        = document.getElementById('day-filter');
+const dayFilterChips   = document.getElementById('day-filter-chips');
 const stepCompose      = document.getElementById('step-compose');
 const messageText      = document.getElementById('message-text');
 const mediaFile        = document.getElementById('media-file');
@@ -113,6 +115,20 @@ let _activeSheetLabel   = '';
 let _templates          = [];
 let _selectedTemplateId = '';
 let _waReady            = false;
+let activeDayFilter     = new Set();
+
+const DAY_CHIP_DEFS = [
+  { token: 'today', label: 'היום' },
+  { token: 0, label: 'א׳' },
+  { token: 1, label: 'ב׳' },
+  { token: 2, label: 'ג׳' },
+  { token: 3, label: 'ד׳' },
+  { token: 4, label: 'ה׳' },
+  { token: 5, label: 'ו׳' },
+  { token: 6, label: 'ש׳' },
+];
+
+const DAY_LABELS_HE = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
 
 // ── Generic helpers ───────────────────────────────────────────────────────────
 function showWaState(state) {
@@ -634,6 +650,83 @@ excelFile.addEventListener('change', async (e) => {
 function applyContacts(contacts, groups) {
   allContacts = contacts;
   allGroups   = groups;
+  updateDayFilterUi();
+}
+
+function hasTrainingDayData() {
+  return allContacts.some((c) => (c.trainingDays || []).length > 0);
+}
+
+function resolveActiveFilterDays() {
+  const out = new Set();
+  for (const token of activeDayFilter) {
+    if (token === 'today') out.add(new Date().getDay());
+    else out.add(token);
+  }
+  return out;
+}
+
+function groupPassesDayFilter(group) {
+  const filter = resolveActiveFilterDays();
+  if (filter.size === 0) return true;
+  return allContacts
+    .filter((c) => c.group === group)
+    .some((c) => (c.trainingDays || []).some((d) => filter.has(d)));
+}
+
+function getGroupTrainingDays(group) {
+  const days = new Set();
+  allContacts.filter((c) => c.group === group).forEach((c) => {
+    (c.trainingDays || []).forEach((d) => days.add(d));
+  });
+  return [...days].sort((a, b) => a - b);
+}
+
+function formatGroupDays(days) {
+  return days.map((d) => DAY_LABELS_HE[d] || '').filter(Boolean).join(', ');
+}
+
+function updateDayFilterUi() {
+  if (!dayFilter || !dayFilterChips) return;
+  const show = hasTrainingDayData();
+  dayFilter.classList.toggle('hidden', !show);
+  if (!show) {
+    activeDayFilter.clear();
+    return;
+  }
+  if (dayFilterChips.childElementCount === 0) {
+    DAY_CHIP_DEFS.forEach(({ token, label }) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'day-chip';
+      btn.dataset.dayToken = String(token);
+      btn.textContent = label;
+      btn.addEventListener('click', () => {
+        if (activeDayFilter.has(token)) activeDayFilter.delete(token);
+        else activeDayFilter.add(token);
+        syncDayChipStyles();
+        applyDayFilter();
+      });
+      dayFilterChips.appendChild(btn);
+    });
+  }
+  syncDayChipStyles();
+}
+
+function syncDayChipStyles() {
+  if (!dayFilterChips) return;
+  dayFilterChips.querySelectorAll('.day-chip').forEach((btn) => {
+    const token = btn.dataset.dayToken === 'today' ? 'today' : Number(btn.dataset.dayToken);
+    btn.classList.toggle('day-chip--active', activeDayFilter.has(token));
+  });
+}
+
+function applyDayFilter() {
+  if (!groupsList) return;
+  groupsList.querySelectorAll('.group-block').forEach((block) => {
+    const group = block.dataset.group;
+    block.classList.toggle('hidden', !groupPassesDayFilter(group));
+  });
 }
 
 function renderUploadSummary({ contacts, groups, skipped }) {
@@ -1066,16 +1159,21 @@ function renderGroupsList() {
 
     const block = document.createElement('div');
     block.className = 'group-block';
+    block.dataset.group = group;
 
     // ── Group header row ───────────────────────────────────────────────────
     const header = document.createElement('div');
     header.className = 'group-header';
+    const groupDays = getGroupTrainingDays(group);
+    const daysLabel = groupDays.length ? formatGroupDays(groupDays) : '';
+
     header.innerHTML = `
       <label class="group-label">
         <input type="checkbox" class="group-checkbox"
                data-group="${esc(group)}" id="${groupId}"
                ${groupHasSelectable ? '' : 'disabled'} />
         <span class="group-name">${esc(group)}</span>
+        ${daysLabel ? `<span class="group-days">${esc(daysLabel)}</span>` : ''}
         <span class="group-badge">${clients.length}</span>
       </label>
       <button class="btn-toggle" data-group="${esc(group)}" aria-expanded="false">Show</button>`;
@@ -1160,6 +1258,7 @@ function renderGroupsList() {
     });
 
     block.appendChild(contactsDiv);
+    block.classList.toggle('hidden', !groupPassesDayFilter(group));
     groupsList.appendChild(block);
 
     // Group toggle
@@ -1195,6 +1294,9 @@ function renderGroupsList() {
     syncGroupCheckbox(cb.dataset.group);
     updateSelectionUI();
   });
+
+  updateDayFilterUi();
+  applyDayFilter();
 }
 
 /** Sync the client-level checkbox indeterminate/checked state. */
@@ -1229,14 +1331,16 @@ function updateSelectionUI() {
 }
 
 btnSelectAll.addEventListener('click', () => {
-  allContacts.filter(isSelectableContact).forEach((c) => {
-    selectedKeys.add(selectionKey(c.clientId, c.chatId));
+  allContacts
+    .filter((c) => isSelectableContact(c) && groupPassesDayFilter(c.group))
+    .forEach((c) => selectedKeys.add(selectionKey(c.clientId, c.chatId)));
+  groupsList.querySelectorAll('.group-block:not(.hidden) .contact-checkbox:not(:disabled)').forEach((cb) => {
+    cb.checked = true;
   });
-  groupsList.querySelectorAll('.contact-checkbox:not(:disabled)').forEach((cb) => { cb.checked = true; });
-  groupsList.querySelectorAll('.client-checkbox:not(:disabled)').forEach((cb) => {
+  groupsList.querySelectorAll('.group-block:not(.hidden) .client-checkbox:not(:disabled)').forEach((cb) => {
     cb.checked = true; cb.indeterminate = false;
   });
-  groupsList.querySelectorAll('.group-checkbox:not(:disabled)').forEach((cb) => {
+  groupsList.querySelectorAll('.group-block:not(.hidden) .group-checkbox:not(:disabled)').forEach((cb) => {
     cb.checked = true; cb.indeterminate = false;
   });
   updateSelectionUI();
