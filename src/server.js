@@ -11,7 +11,7 @@ const sheets   = require('./sheets');
 const sources    = require('./sources');
 const sync       = require('./sync');
 const templates  = require('./templates');
-const { sendCampaign } = require('./sender');
+const { sendCampaign, dedupeChatIds } = require('./sender');
 
 const app    = express();
 const server = http.createServer(app);
@@ -200,6 +200,7 @@ app.post('/api/send', upload.single('media'), async (req, res) => {
   if (!message && !req.file) {
     return res.status(400).json({ error: 'Message or media is required.' });
   }
+  chatIds = dedupeChatIds(chatIds);
   if (chatIds.length === 0) {
     return res.status(400).json({ error: 'No recipients selected.' });
   }

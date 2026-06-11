@@ -981,6 +981,26 @@ input[type="file"] {
   background: #eef8f2;
 }
 
+.contact-row--unavailable {
+  background: #fafafa;
+  color: #888;
+  cursor: default;
+}
+
+.contact-row--unavailable:hover {
+  background: #fafafa;
+}
+
+.contact-row--unavailable input[type="checkbox"] {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.contact-phone--missing {
+  font-style: italic;
+  color: #b45309;
+}
+
 .phones-list {
   padding: 2px 0;
 }

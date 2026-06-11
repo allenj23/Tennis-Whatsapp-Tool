@@ -8,7 +8,7 @@ const {
 } = require('./helpers/wa-mock');
 
 // Load sender.js once with whatsapp + whatsapp-web.js replaced by fakes.
-const { sendCampaign, setFakeClient, MessageMediaCalls } = loadSenderWithMocks();
+const { sendCampaign, dedupeChatIds, setFakeClient, MessageMediaCalls } = loadSenderWithMocks();
 
 let restoreTimers;
 beforeEach(() => { restoreTimers = patchInstantTimers(); MessageMediaCalls.length = 0; });
@@ -21,7 +21,31 @@ const contacts = [
 ];
 const ids = contacts.map((c) => c.chatId);
 
+describe('sender.dedupeChatIds', () => {
+  test('drops duplicate chatIds while preserving first-seen order', () => {
+    const dup = [ids[0], ids[1], ids[0], ids[2], ids[1]];
+    assert.deepEqual(dedupeChatIds(dup), ids);
+  });
+});
+
 describe('sender.sendCampaign — text messages (expected PASS)', () => {
+  test('duplicate chatIds in the request are sent only once', async () => {
+    const client = makeFakeClient();
+    setFakeClient(client);
+    const io = makeFakeIo();
+
+    await sendCampaign({
+      chatIds: [ids[0], ids[0], ids[1]],
+      message: 'Hello',
+      media: null,
+      io,
+      contacts,
+    });
+
+    assert.equal(client.sent.length, 2);
+    assert.deepEqual(client.sent.map((s) => s.chatId), [ids[0], ids[1]]);
+  });
+
   test('sends a plain text message to each recipient, in order', async () => {
     const client = makeFakeClient();
     setFakeClient(client);

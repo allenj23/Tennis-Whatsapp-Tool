@@ -55,6 +55,21 @@ function getField(row, candidates) {
   return '';
 }
 
+function makeUnavailableEnrollment({ client, group, clientId, reason }) {
+  return {
+    name:               client,
+    phone:              '',
+    chatId:             '',
+    group,
+    client,
+    clientId,
+    enrollmentId:       clientId,
+    role:               '',
+    unavailable:        true,
+    unavailableReason:  reason,
+  };
+}
+
 // ── buildContacts ─────────────────────────────────────────────────────────────
 
 /**
@@ -64,23 +79,20 @@ function getField(row, candidates) {
  * Each spreadsheet row can have multiple phone columns (mother / father / player).
  * Each non-empty, valid phone becomes its own contact entry tagged with:
  *   - client     : the original client name (שם הלקוח)
- *   - clientId   : a stable per-row ID so all phones from the same row are grouped
+ *   - clientId   : enrollment ID (one sheet row); phones from the same row share it
+ *   - enrollmentId : same as clientId (alias for clarity)
  *   - role       : Hebrew role label (שחקן / אמא / אבא / '' for generic)
  *   - name       : display name = client + role suffix (e.g. "דנה כהן – אמא")
  *
- * The contact shape is additive: name/phone/chatId/group are unchanged so the
- * sender, status view, retry, reconciliation and dedupe/merge code need no edits.
+ * Rows without a valid phone become unavailable enrollments (visible, not selectable).
+ * Duplicate phones across rows are kept; dedupe happens only at send time.
  *
  * @param {object[]} rows
- * @param {{ dedupe?: boolean }} [opts]
- *   dedupe — skip contacts whose chatId was already added (first occurrence wins).
- *            Used when merging rows from multiple tabs. Default: false.
  * @returns {{ contacts: object[], groups: string[], skipped: object[] }}
  */
-function buildContacts(rows, { dedupe = false } = {}) {
+function buildContacts(rows) {
   const contacts = [];
   const skipped  = [];
-  const seenIds  = new Set(); // cross-row dedupe (used only when dedupe=true)
 
   rows.forEach((row, idx) => {
     const client = getField(row, NAME_HEADERS);
@@ -118,31 +130,26 @@ function buildContacts(rows, { dedupe = false } = {}) {
       if (rowSeen.has(chatId)) continue;
       rowSeen.add(chatId);
 
-      // Cross-row dedupe (merged-tab mode)
-      if (dedupe && seenIds.has(chatId)) continue;
-      seenIds.add(chatId);
-
       rowHasValidPhone = true;
 
       const displayName = col.label ? `${client} – ${col.label}` : client;
 
       contacts.push({
-        name:     displayName,
+        name:         displayName,
         phone,
         chatId,
         group,
-        client,   // original name without role suffix
-        clientId, // groups all phones from the same row
-        role:     col.label,
+        client,       // original name without role suffix
+        clientId,     // one enrollment per sheet row
+        enrollmentId: clientId,
+        role:         col.label,
       });
     }
 
-    // Skip the entire row only for genuine data-quality problems,
-    // not for phones dropped purely by cross-row dedupe.
-    if (!rowHasAnyPhone) {
-      skipped.push({ row: idx + 2, name: client, phone: '', reason: 'Missing phone' });
-    } else if (!rowHasValidPhone && !contacts.some((c) => c.clientId === clientId)) {
-      skipped.push({ row: idx + 2, name: client, phone: '', reason: 'Invalid phone number' });
+  // Rows with no usable phone still appear as non-selectable enrollments.
+    if (!rowHasValidPhone && !contacts.some((c) => c.clientId === clientId)) {
+      const reason = !rowHasAnyPhone ? 'Missing phone' : 'Invalid phone number';
+      contacts.push(makeUnavailableEnrollment({ client, group, clientId, reason }));
     }
   });
 

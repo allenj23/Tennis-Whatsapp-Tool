@@ -38,9 +38,9 @@ function loadSenderWithMocks() {
   };
 
   delete require.cache[senderPath];
-  const { sendCampaign } = require(senderPath);
+  const { sendCampaign, dedupeChatIds } = require(senderPath);
 
-  return { sendCampaign, setFakeClient, getFakeClient, MessageMediaCalls };
+  return { sendCampaign, dedupeChatIds, setFakeClient, getFakeClient, MessageMediaCalls };
 }
 
 /** A fake WhatsApp client that records sends and can be told which chatIds fail. */

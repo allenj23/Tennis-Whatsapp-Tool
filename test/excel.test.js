@@ -27,10 +27,12 @@ describe('buildContacts — shared normalization pipeline', () => {
     assert.equal(skipped.length, 1);
   });
 
-  test('invalid phone is skipped', () => {
-    const { skipped } = buildContacts([{ Name: 'Bob', Phone: 'N/A', Group: 'X' }]);
-    assert.equal(skipped.length, 1);
-    assert.match(skipped[0].reason, /Invalid phone number/);
+  test('invalid phone produces a non-selectable enrollment', () => {
+    const { contacts, skipped } = buildContacts([{ Name: 'Bob', Phone: 'N/A', Group: 'X' }]);
+    assert.equal(skipped.length, 0);
+    assert.equal(contacts.length, 1);
+    assert.equal(contacts[0].unavailable, true);
+    assert.match(contacts[0].unavailableReason, /Invalid phone number/);
   });
 
   test('empty row array returns empty result without throwing', () => {
@@ -43,40 +45,19 @@ describe('buildContacts — shared normalization pipeline', () => {
   });
 });
 
-// ── buildContacts dedupe option (used when merging multiple tabs) ──────────────
-describe('buildContacts — dedupe option (multi-tab merge)', () => {
-  const kidsRows = [
-    { Name: 'Alice', Phone: '0501111111', Group: 'Kids' },
-    { Name: 'Bob',   Phone: '0502222222', Group: 'Kids' },
-  ];
-  const adultsRows = [
-    { Name: 'Alice', Phone: '0501111111', Group: 'Adults' }, // duplicate phone
-    { Name: 'Carol', Phone: '0503333333', Group: 'Adults' },
-  ];
-  const merged = [...kidsRows, ...adultsRows];
-
-  test('without dedupe: duplicate chatIds are kept (default behaviour)', () => {
-    const { contacts } = buildContacts(merged);
-    assert.equal(contacts.length, 4); // Alice appears twice
+// ── buildContacts — duplicate phones across rows (enrollments never collapsed) ──
+describe('buildContacts — duplicate phones across enrollments', () => {
+  test('duplicate chatIds across rows are kept as separate enrollments', () => {
+    const rows = [
+      { Name: 'Alice', Phone: '0501111111', Group: 'Kids' },
+      { Name: 'Bob',   Phone: '0502222222', Group: 'Kids' },
+      { Name: 'Alice', Phone: '0501111111', Group: 'Adults' },
+      { Name: 'Carol', Phone: '0503333333', Group: 'Adults' },
+    ];
+    const { contacts, groups } = buildContacts(rows);
+    assert.equal(contacts.length, 4);
     assert.equal(contacts.filter((c) => c.phone === '972501111111').length, 2);
-  });
-
-  test('with dedupe:true: duplicate chatIds are collapsed — first occurrence wins', () => {
-    const { contacts } = buildContacts(merged, { dedupe: true });
-    assert.equal(contacts.length, 3); // Alice, Bob, Carol
-    const alice = contacts.find((c) => c.name === 'Alice');
-    assert.equal(alice.group, 'Kids'); // first tab wins
-  });
-
-  test('with dedupe:true: groups reflect only the kept contacts', () => {
-    const { groups } = buildContacts(merged, { dedupe: true });
-    // Alice kept as Kids, Bob as Kids, Carol as Adults
     assert.deepEqual(groups, ['Adults', 'Kids']);
-  });
-
-  test('dedupe:true on rows with no duplicates behaves identically to default', () => {
-    const { contacts } = buildContacts(kidsRows, { dedupe: true });
-    assert.equal(contacts.length, 2);
   });
 });
 
@@ -155,11 +136,12 @@ describe('excel.parseBuffer — invalid rows are skipped (expected PASS)', () =>
     assert.match(skipped[0].reason, /Missing name/);
   });
 
-  test('missing phone is skipped', () => {
+  test('missing phone is shown as unavailable enrollment', () => {
     const buf = makeContactsXlsx([['NoPhone', '', 'Members']]);
     const { contacts, skipped } = parseBuffer(buf);
-    assert.equal(contacts.length, 0);
-    assert.equal(skipped.length, 1);
+    assert.equal(contacts.length, 1);
+    assert.equal(skipped.length, 0);
+    assert.equal(contacts[0].unavailable, true);
   });
 
   test('whitespace-only name is treated as empty and skipped', () => {
@@ -168,12 +150,13 @@ describe('excel.parseBuffer — invalid rows are skipped (expected PASS)', () =>
     assert.equal(skipped.length, 1);
   });
 
-  test('phone with no digits is skipped as invalid', () => {
+  test('phone with no digits is shown as unavailable enrollment', () => {
     const buf = makeContactsXlsx([['Junk', 'N/A', 'Members']]);
     const { contacts, skipped } = parseBuffer(buf);
-    assert.equal(contacts.length, 0);
-    assert.equal(skipped.length, 1);
-    assert.match(skipped[0].reason, /Invalid phone number/);
+    assert.equal(contacts.length, 1);
+    assert.equal(skipped.length, 0);
+    assert.equal(contacts[0].unavailable, true);
+    assert.match(contacts[0].unavailableReason, /Invalid phone number/);
   });
 
   test('valid + invalid mixed: keeps valid, reports skipped row number', () => {
@@ -272,12 +255,13 @@ describe('buildContacts — Hebrew column names', () => {
     assert.equal(skipped.length, 0, 'within-row dedupe is not reported as a skip');
   });
 
-  test('row with no phone columns at all is skipped with "Missing phone"', () => {
+  test('row with no phone columns appears as unavailable enrollment', () => {
     const rows = [{ 'שם הלקוח': 'ללא טלפון', 'שם קבוצה': 'ותיקים' }];
     const { contacts, skipped } = buildContacts(rows);
-    assert.equal(contacts.length, 0);
-    assert.equal(skipped.length, 1);
-    assert.match(skipped[0].reason, /Missing phone/);
+    assert.equal(contacts.length, 1);
+    assert.equal(skipped.length, 0);
+    assert.equal(contacts[0].unavailable, true);
+    assert.match(contacts[0].unavailableReason, /Missing phone/);
   });
 
   test('missing name column is skipped with "Missing name"', () => {

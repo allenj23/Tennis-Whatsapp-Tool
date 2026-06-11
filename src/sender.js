@@ -11,6 +11,18 @@ function randomDelay() {
   );
 }
 
+/** Preserve first-seen order; drop duplicate chatIds (shared phones across enrollments). */
+function dedupeChatIds(chatIds) {
+  const seen = new Set();
+  const out  = [];
+  for (const id of chatIds) {
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+  }
+  return out;
+}
+
 /**
  * Send a message to a list of recipients one by one.
  * Emits 'send:progress' on the socket after each attempt.
@@ -24,17 +36,21 @@ function randomDelay() {
  */
 async function sendCampaign({ chatIds, message, media, io, contacts }) {
   const client = getClient();
-  const nameMap = Object.fromEntries(contacts.map((c) => [c.chatId, c.name]));
+  const uniqueChatIds = dedupeChatIds(chatIds);
+  const nameMap = {};
+  for (const c of contacts) {
+    if (!nameMap[c.chatId]) nameMap[c.chatId] = c.name;
+  }
 
   let sentCount = 0;
   let failedCount = 0;
 
-  for (let i = 0; i < chatIds.length; i++) {
-    const chatId = chatIds[i];
+  for (let i = 0; i < uniqueChatIds.length; i++) {
+    const chatId = uniqueChatIds[i];
     const name = nameMap[chatId] || chatId;
 
     // Emit "sending" state before attempt
-    io.emit('send:progress', { chatId, name, status: 'sending', index: i, total: chatIds.length });
+    io.emit('send:progress', { chatId, name, status: 'sending', index: i, total: uniqueChatIds.length });
 
     try {
       if (media) {
@@ -45,23 +61,23 @@ async function sendCampaign({ chatIds, message, media, io, contacts }) {
       }
 
       sentCount++;
-      io.emit('send:progress', { chatId, name, status: 'sent', index: i, total: chatIds.length });
-      console.log(`Sent [${i + 1}/${chatIds.length}] ${name}`);
+      io.emit('send:progress', { chatId, name, status: 'sent', index: i, total: uniqueChatIds.length });
+      console.log(`Sent [${i + 1}/${uniqueChatIds.length}] ${name}`);
     } catch (err) {
       failedCount++;
       const error = err.message || 'Unknown error';
-      io.emit('send:progress', { chatId, name, status: 'failed', error, index: i, total: chatIds.length });
-      console.error(`Failed [${i + 1}/${chatIds.length}] ${name}:`, error);
+      io.emit('send:progress', { chatId, name, status: 'failed', error, index: i, total: uniqueChatIds.length });
+      console.error(`Failed [${i + 1}/${uniqueChatIds.length}] ${name}:`, error);
     }
 
     // Throttle delay between sends (skip after last recipient)
-    if (i < chatIds.length - 1) {
+    if (i < uniqueChatIds.length - 1) {
       await randomDelay();
     }
   }
 
-  io.emit('send:done', { total: chatIds.length, sent: sentCount, failed: failedCount });
+  io.emit('send:done', { total: uniqueChatIds.length, sent: sentCount, failed: failedCount });
   console.log(`Campaign done — ${sentCount} sent, ${failedCount} failed`);
 }
 
-module.exports = { sendCampaign };
+module.exports = { sendCampaign, dedupeChatIds };

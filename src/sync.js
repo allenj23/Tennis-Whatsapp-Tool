@@ -78,8 +78,7 @@ async function _runPoll() {
       rows = await _fetchRows(source.id, source.tabName);
     }
 
-    // dedupe=true when merging so the same contact from multiple tabs is only listed once
-    const result = buildContacts(rows, { dedupe: source.tabName === '__all__' });
+    const result = buildContacts(rows);
 
     // Fetch the real spreadsheet title once per source (cosmetic, non-critical)
     let sheetTitle = source.name;
