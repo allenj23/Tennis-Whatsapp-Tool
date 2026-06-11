@@ -34,6 +34,11 @@ function dedupeChatIds(chatIds) {
  * @param {object}        opts.io        - socket.io server instance
  * @param {object[]}      opts.contacts  - Full contact list for name lookup
  */
+function _emit(io, event, data) {
+  const { broadcastTarget } = require('./google-auth/socketAuth');
+  broadcastTarget(io).emit(event, data);
+}
+
 async function sendCampaign({ chatIds, message, media, io, contacts }) {
   const client = getClient();
   const uniqueChatIds = dedupeChatIds(chatIds);
@@ -50,7 +55,7 @@ async function sendCampaign({ chatIds, message, media, io, contacts }) {
     const name = nameMap[chatId] || chatId;
 
     // Emit "sending" state before attempt
-    io.emit('send:progress', { chatId, name, status: 'sending', index: i, total: uniqueChatIds.length });
+    _emit(io, 'send:progress', { chatId, name, status: 'sending', index: i, total: uniqueChatIds.length });
 
     try {
       if (media) {
@@ -61,12 +66,12 @@ async function sendCampaign({ chatIds, message, media, io, contacts }) {
       }
 
       sentCount++;
-      io.emit('send:progress', { chatId, name, status: 'sent', index: i, total: uniqueChatIds.length });
+      _emit(io, 'send:progress', { chatId, name, status: 'sent', index: i, total: uniqueChatIds.length });
       console.log(`Sent [${i + 1}/${uniqueChatIds.length}] ${name}`);
     } catch (err) {
       failedCount++;
       const error = err.message || 'Unknown error';
-      io.emit('send:progress', { chatId, name, status: 'failed', error, index: i, total: uniqueChatIds.length });
+      _emit(io, 'send:progress', { chatId, name, status: 'failed', error, index: i, total: uniqueChatIds.length });
       console.error(`Failed [${i + 1}/${uniqueChatIds.length}] ${name}:`, error);
     }
 
@@ -76,7 +81,7 @@ async function sendCampaign({ chatIds, message, media, io, contacts }) {
     }
   }
 
-  io.emit('send:done', { total: uniqueChatIds.length, sent: sentCount, failed: failedCount });
+  _emit(io, 'send:done', { total: uniqueChatIds.length, sent: sentCount, failed: failedCount });
   console.log(`Campaign done — ${sentCount} sent, ${failedCount} failed`);
 }
 

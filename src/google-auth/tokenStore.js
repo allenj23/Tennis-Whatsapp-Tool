@@ -93,10 +93,29 @@ function updateTokens(tokens) {
 
 function setConnection(tokens, profile) {
   save({
+    mode: 'oauth',
     tokens,
     profile: profile || { email: '' },
     connectedAt: new Date().toISOString(),
   });
+}
+
+/** SSO identity session — no Google API tokens stored for Sheets access. */
+function setSession(profile) {
+  save({
+    mode: 'sso',
+    tokens: null,
+    profile: profile || { email: '' },
+    connectedAt: new Date().toISOString(),
+  });
+}
+
+function isSessionValid(maxAgeMs) {
+  const conn = load();
+  if (!conn || conn.mode !== 'sso') return false;
+  if (!conn.profile?.email) return false;
+  const age = Date.now() - new Date(conn.connectedAt || 0).getTime();
+  return age >= 0 && age < maxAgeMs;
 }
 
 module.exports = {
@@ -107,4 +126,6 @@ module.exports = {
   getProfile,
   updateTokens,
   setConnection,
+  setSession,
+  isSessionValid,
 };

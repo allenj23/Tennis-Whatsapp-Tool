@@ -26,7 +26,11 @@ let _lastStatus   = { status: 'idle' };
 // ── helpers ────────────────────────────────────────────────────────────────────
 
 function _setStatus(s)          { _lastStatus = s; }
-function _broadcast(event, data) { if (_io) _io.emit(event, data); }
+function _broadcast(event, data) {
+  if (!_io) return;
+  const { broadcastTarget } = require('./google-auth/socketAuth');
+  broadcastTarget(_io).emit(event, data);
+}
 
 function _scheduleNext(delayMs) {
   if (_timer) clearTimeout(_timer);
@@ -34,6 +38,8 @@ function _scheduleNext(delayMs) {
 }
 
 function _useOAuth() {
+  const googleCfg = require('./google-auth/config');
+  if (googleCfg.isSsoMode()) return false;
   return googleOAuth.isConnected();
 }
 

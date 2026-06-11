@@ -9,7 +9,7 @@ module.exports = {
   // SHEETS_CREDENTIALS_FILE : path to the service-account JSON key file
   //   (relative to the project root, or absolute)
   //   git-ignored — never commit the key file.
-  SHEETS_SPREADSHEET_ID:   process.env.SHEETS_SPREADSHEET_ID   || '1RMsActr_byLwQFi0OMRejAoUjszs4THBlO0MVc5d6jE',
+  SHEETS_SPREADSHEET_ID:   process.env.SHEETS_SPREADSHEET_ID   || '',
   SHEETS_CREDENTIALS_FILE: process.env.SHEETS_CREDENTIALS_FILE || 'whatsapp-tools-498709-c7388e8176ac.json',
 
   // Name of the worksheet tab to read (leave blank for the first sheet).

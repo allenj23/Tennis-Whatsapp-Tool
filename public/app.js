@@ -108,6 +108,7 @@ let allGroups         = [];
 let selectedKeys      = new Set();
 let failedChatIds     = [];
 let _googleOAuthMode    = false;
+let _googleSsoMode      = false;
 let _googleSpreadsheets = [];
 let _googleConnected    = false;
 let _sheetConfigured    = false;
@@ -207,6 +208,14 @@ socket.on('disconnect', () => {
   serverStatus.className = 'badge badge--offline';
 });
 
+socket.on('auth:revoked', ({ message } = {}) => {
+  handleAccessRevoked(message);
+});
+
+socket.on('auth:required', () => {
+  if (_googleOAuthMode) showGooglePhase('google');
+});
+
 socket.on('server:ready', ({ sheetsConfigured, googleOAuthMode, googleConnected } = {}) => {
   showWaState('waiting');
   waStatus.textContent = 'Initializing WhatsApp...';
@@ -252,6 +261,27 @@ function showReconnectBanner(msg) {
 
 function hideReconnectBanner() {
   googleReconnectBanner.classList.add('hidden');
+}
+
+function handleAccessRevoked(msg) {
+  _googleConnected  = false;
+  _sheetConfigured  = false;
+  allContacts       = [];
+  allGroups         = [];
+  selectedKeys.clear();
+  updateGoogleHeaderBadge('');
+  showGoogleError(msg || 'Your access was revoked. Sign in again.');
+  showReconnectBanner(msg || 'Your access was revoked. Sign in again.');
+  showGooglePhase('google');
+  updateLayoutMode();
+}
+
+function checkApiAuthError(data) {
+  if (data?.code === 'access_revoked') {
+    handleAccessRevoked(data.error);
+    return true;
+  }
+  return false;
 }
 
 function updateGoogleHeaderBadge(email) {
@@ -307,13 +337,16 @@ function showGooglePhase(phase) {
 async function refreshGoogleUi() {
   if (!_googleOAuthMode) return;
   try {
-    const status = await fetch('/api/google/status').then((r) => r.json());
+    const statusRes = await fetch('/api/google/status');
+    const status = await statusRes.json();
+    if (checkApiAuthError(status)) return;
     if (!status.vendorConfigured) {
       showGooglePhase('google');
       showGoogleError('Google sign-in is not available.');
       return;
     }
 
+    _googleSsoMode   = !!status.ssoMode;
     _googleConnected = !!status.connected;
     updateGoogleHeaderBadge(status.connected ? status.email : '');
 
@@ -370,6 +403,7 @@ async function loadGoogleSpreadsheets() {
   try {
     const res  = await fetch('/api/google/spreadsheets');
     const data = await res.json();
+    if (checkApiAuthError(data)) return;
     if (!res.ok) throw new Error(data.error || 'Failed to load spreadsheets');
     _googleSpreadsheets = data.spreadsheets || [];
     if (_googleSpreadsheets.length === 0) {

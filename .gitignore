@@ -17,6 +17,7 @@ whatsapp-tools-*.json
 oauth-spike.credentials.json
 vendor-google-oauth.json
 src/google-auth/baked-credentials.js
+gcs-allowed-users.json
 
 # Release builds
 dist/

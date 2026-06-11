@@ -1,8 +1,8 @@
 /**
  * Vendor-owned Google OAuth configuration.
  * Loaded in priority order:
- *   1. Environment variables (dev override)
- *   2. Baked credentials (Windows release build)
+ *   1. Baked credentials (Windows release build — locks authMode)
+ *   2. Environment variables (dev override when not baked)
  *   3. vendor-google-oauth.json on disk (local dev)
  * Customers never configure this.
  */
@@ -61,13 +61,35 @@ const redirectUri  = process.env.GOOGLE_OAUTH_REDIRECT_URI
   || fileCreds?.redirectUri
   || defaultRedirectUri();
 
+/** Release builds bake authMode=sso — env cannot override. */
+const AUTH_MODE = baked?.authMode
+  || (process.env.AUTH_MODE || 'sso').toLowerCase();
+
+const IDENTITY_SCOPES = ['openid', 'email', 'profile'];
+const SHEETS_OAUTH_SCOPES = [
+  'https://www.googleapis.com/auth/spreadsheets.readonly',
+  'https://www.googleapis.com/auth/drive.metadata.readonly',
+  ...IDENTITY_SCOPES,
+];
+
 module.exports = {
-  SCOPES: [
-    'https://www.googleapis.com/auth/spreadsheets.readonly',
-    'https://www.googleapis.com/auth/drive.metadata.readonly',
-    'openid',
-    'email',
-  ],
+  AUTH_MODE,
+  isReleaseBuild: Boolean(baked?.authMode),
+
+  allowlistGcsUri: baked?.allowlistGcsUri
+    || process.env.ALLOWLIST_GCS_URI
+    || '',
+
+  /** Google Workspace domain, e.g. yourclub.com — optional extra gate */
+  hostedDomain: baked?.hostedDomain
+    || process.env.GOOGLE_HOSTED_DOMAIN
+    || '',
+
+  allowlistCacheMs: Number(process.env.ALLOWLIST_CACHE_MS) || 5 * 60 * 1000,
+  sessionMaxAgeMs:  Number(process.env.SESSION_MAX_AGE_MS) || 24 * 60 * 60 * 1000,
+
+  SCOPES: SHEETS_OAUTH_SCOPES,
+  IDENTITY_SCOPES,
 
   clientId,
   clientSecret,
@@ -75,6 +97,34 @@ module.exports = {
 
   isVendorConfigured() {
     return Boolean(this.clientId && this.clientSecret);
+  },
+
+  isSsoMode() {
+    return this.AUTH_MODE === 'sso';
+  },
+
+  loginScopes() {
+    return this.isSsoMode() ? this.IDENTITY_SCOPES : this.SCOPES;
+  },
+
+  validateSsoStartup() {
+    if (!this.isSsoMode() || !this.isVendorConfigured()) return;
+    const errors = [];
+    if (!this.allowlistGcsUri) {
+      errors.push('ALLOWLIST_GCS_URI is required in SSO mode');
+    }
+    const serviceAccount = require('./serviceAccount');
+    if (!serviceAccount.isConfigured()) {
+      errors.push('Service account key (SHEETS_CREDENTIALS_FILE) is required in SSO mode');
+    }
+    if (errors.length === 0) return;
+
+    const msg = `[google-auth] ${errors.join('; ')}`;
+    if (this.isReleaseBuild) {
+      console.error(`${msg} — release build cannot start.`);
+      process.exit(1);
+    }
+    console.warn(`${msg} — Google sign-in will fail until configured.`);
   },
 };
 

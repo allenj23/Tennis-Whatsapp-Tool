@@ -4,7 +4,10 @@
  * (src/google-auth/baked-credentials.js — git-ignored)
  */
 module.exports = {
-  clientId:     '',
-  clientSecret: '',
-  redirectUri:  'http://127.0.0.1:3000/api/google/auth/callback',
+  clientId:        '',
+  clientSecret:    '',
+  redirectUri:     'http://127.0.0.1:3000/api/google/auth/callback',
+  authMode:        'sso',
+  allowlistGcsUri: 'gs://your-bucket/config/allowed-users.json',
+  hostedDomain:    '',
 };
